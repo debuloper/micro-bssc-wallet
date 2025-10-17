@@ -140,151 +140,118 @@
 </div>
 
 <!-- ethers.js + アプリ本体 -->
-<script type="module">
-  import { ethers } from "https://cdn.jsdelivr.net/npm/ethers@6.13.2/dist/ethers.min.js";
-  const $ = (id)=>document.getElementById(id);
-
-  // DOM
-  const rpc=$("rpc"), ping=$("ping"), gen=$("gen"), save=$("save"), load=$("load"), check=$("check");
-  const addr=$("addr"), pk=$("pk"), copyAddr=$("copyAddr"), expl=$("expl");
-  const bal=$("bal"), gas=$("gas"), upd=$("upd");
-  const to=$("to"), amt=$("amt"), send=$("send");
-  const status=$("status"), logs=$("logs"), clear=$("clear");
-  const toast=$("toast"), toastText=$("toastText");
-
-  // 状態
+<script src="https://cdn.jsdelivr.net/npm/web3@4.7.0/dist/web3.min.js"></script>
+<script>
+  const $  = (id)=>document.getElementById(id);
+  const rpc = $("rpc"); const addr=$("addr"); const pk=$("pk");
+  const gen=$("gen"); const save=$("save"); const load=$("load");
+  const ping=$("ping"); const check=$("check");
+  const bal=$("bal"); const gas=$("gas"); const upd=$("upd");
+  const to=$("to"); const amt=$("amt"); const send=$("send");
+  const logs=$("logs"); const expl=$("expl"); const copyAddr=$("copyAddr");
   const LS_KEY="micro_bssc_wallet_priv";
-  let provider=null, wallet=null;
 
-  function setProvider(){
-    const url=rpc.value.trim();
-    if(!url) throw new Error("RPC URL を入力してください");
-    provider=new ethers.JsonRpcProvider(url);
-  }
+  let web3;       // Web3インスタンス (HTTP)
+  let account;    // { address, privateKey }
 
-  function showToast(text){
-    toastText.textContent=text; toast.classList.add("show");
-    setTimeout(()=>toast.classList.remove("show"),1400);
-  }
-
-  function addLog({type="info", msg, hash}){
-    const row=document.createElement("div"); row.className="log-row";
-    const ts=document.createElement("div"); ts.className="mono text-zinc-400"; ts.textContent=new Date().toLocaleTimeString();
-    const content=document.createElement("div"); content.className="truncate";
-    const badge=document.createElement("span"); badge.className="tag "+(type==="ok"?"ok":type==="err"?"err":"info"); badge.textContent=type.toUpperCase();
-    content.appendChild(badge);
-    const span=document.createElement("span"); span.className="ml-2";
-    if(hash){
-      const a=document.createElement("a");
-      a.href = (expl.href || "https://explorer.bssc.live") + "/tx/" + hash;
-      a.target="_blank"; a.rel="noreferrer"; a.textContent=msg || hash; a.className="hover-copy";
-      content.appendChild(a);
-      const copy = document.createElement("button");
-      copy.className="ml-2 text-xs underline decoration-dotted text-zinc-300";
-      copy.textContent="Copy";
-      copy.onclick=()=>{ navigator.clipboard.writeText(hash); showToast("Tx hash copied"); };
-      content.appendChild(copy);
-    } else {
-      span.textContent = msg;
-      content.appendChild(span);
-    }
-    const act=document.createElement("div");
-    row.appendChild(ts); row.appendChild(content); row.appendChild(act);
+  function log(type,msg){ // Phantom風ログ簡易
+    const row=document.createElement("div");
+    row.className="log-row";
+    row.innerHTML = `<div class="mono text-zinc-400">${new Date().toLocaleTimeString()}</div>
+      <div class="truncate"><span class="tag ${type==='ok'?'ok':type==='err'?'err':'info'}">${type.toUpperCase()}</span>
+      <span class="ml-2">${msg}</span></div><div></div>`;
     logs.prepend(row);
   }
 
-  function setStatus(state){
-    status.classList.remove("hidden");
-    status.className="pill "+(state==="ok"?"ok":state==="slow"?"slow":"err");
-    status.innerHTML = state==="ok"
-      ? '<span class="size-2 rounded-full bg-emerald-400"></span><span>HEALTHY</span>'
-      : state==="slow"
-      ? '<span class="size-2 rounded-full bg-amber-400"></span><span>SLOW</span>'
-      : '<span class="size-2 rounded-full bg-rose-400"></span><span>ERROR</span>';
+  function ensureWeb3(){
+    const url = (rpc.value||"").trim();
+    if(!url) throw new Error("RPC URLを入力");
+    web3 = new Web3(new Web3.providers.HttpProvider(url));
+    return web3;
   }
 
-  // 生成/保存/復元
-  gen.onclick=()=>{
-    wallet = ethers.Wallet.createRandom();
-    addr.textContent = wallet.address;
-    pk.value = wallet.privateKey;
-    expl.href = "https://explorer.bssc.live/address/"+wallet.address;
-    addLog({type:"info", msg:"新しいウォレットを生成しました"});
+  // 1) ウォレット生成/保存/読込（EVM）
+  gen.onclick = ()=>{
+    const w = Web3.eth.accounts.create();     // {address, privateKey}
+    account = w;
+    addr.textContent = w.address;
+    pk.value = w.privateKey;                  // 本番は暗号化保存
+    expl.href = "https://explorer.bssc.live/address/"+w.address;
+    log("info","新しいウォレットを生成しました");
   };
-  save.onclick=()=>{
-    if(!wallet) return addLog({type:"err", msg:"先にウォレットを生成してください"});
-    localStorage.setItem(LS_KEY, wallet.privateKey);
-    addLog({type:"ok", msg:"ローカルに秘密鍵を保存しました（デモ）"});
+  save.onclick = ()=>{ if(!account) return log("err","先に生成");
+    localStorage.setItem(LS_KEY, account.privateKey); log("ok","ローカル保存（デモ）");
   };
-  load.onclick=()=>{
-    const priv=localStorage.getItem(LS_KEY);
-    if(!priv) return addLog({type:"err", msg:"保存された秘密鍵がありません"});
+  load.onclick = ()=>{
+    const priv = localStorage.getItem(LS_KEY);
+    if(!priv) return log("err","保存がありません");
     try{
-      wallet=new ethers.Wallet(priv);
-      addr.textContent=wallet.address; pk.value=priv;
-      expl.href="https://explorer.bssc.live/address/"+wallet.address;
-      addLog({type:"ok", msg:"ローカルからウォレットを復元しました"});
-    }catch(e){ addLog({type:"err", msg:"復元エラー: "+(e.message||e)}) }
+      account = Web3.eth.accounts.privateKeyToAccount(priv);
+      addr.textContent = account.address; pk.value = priv;
+      expl.href = "https://explorer.bssc.live/address/"+account.address;
+      log("ok","ローカルから復元しました");
+    }catch(e){ log("err","復元エラー: "+(e.message||e)); }
   };
-  copyAddr.onclick=async()=>{
-    const a=addr.textContent.trim(); if(!a||a==="—") return;
-    await navigator.clipboard.writeText(a); showToast("Address copied");
-  };
+  copyAddr.onclick = async ()=>{ const a=addr.textContent.trim(); if(a&&a!=="—"){ await navigator.clipboard.writeText(a); log("ok","Address copied"); } };
 
-  // Ping（ガス/レイテンシ＋最新）
-  ping.onclick=async()=>{
+  // 2) Ping（生の eth_* を叩く）
+  ping.onclick = async ()=>{
     try{
-      setProvider();
-      const start=performance.now();
-      const bn=await provider.getBlockNumber();
-      const gasPrice=await provider.getGasPrice?.() ?? (await provider.send("eth_gasPrice",[]));
-      const ms=Math.round(performance.now()-start);
-      gas.textContent = ethers.formatUnits(gasPrice, "gwei")+" gwei";
+      ensureWeb3();
+      const t0 = performance.now();
+      const bnHex  = await web3.eth.call({})    // ダミー防止: 何もしない
+      const block  = await web3.eth.getBlockNumber();         // eth_blockNumber
+      const gasWei = await web3.eth.getGasPrice();            // eth_gasPrice
+      const ms = Math.round(performance.now() - t0);
+      gas.textContent = (Number(gasWei)/1e9).toFixed(3) + " gwei";
       upd.textContent = new Date().toLocaleTimeString();
-      setStatus(ms<800?"ok":ms<1500?"slow":"err");
-      addLog({type:"info", msg:`Ping OK (block ${bn}, ${ms}ms)`});
-    }catch(e){
-      setStatus("err");
-      addLog({type:"err", msg:"Ping失敗: "+(e.message||e)});
-    }
+      log("info",`Ping OK (block ${block}, ${ms}ms)`);
+    }catch(e){ log("err","Ping失敗: "+(e.message||e)); }
   };
 
-  // 残高
-  check.onclick=async()=>{
+  // 3) 残高
+  check.onclick = async ()=>{
     try{
-      setProvider();
-      if(!wallet) return addLog({type:"err", msg:"先にウォレットを生成/復元してください"});
-      const wei=await provider.getBalance(wallet.address);
-      bal.textContent = ethers.formatEther(wei)+" BNB";
+      ensureWeb3();
+      if(!account) return log("err","先にウォレットを生成/復元してください");
+      const wei = await web3.eth.getBalance(account.address); // eth_getBalance
+      bal.textContent = (Number(wei)/1e18) + " BNB";
       upd.textContent = new Date().toLocaleTimeString();
-      addLog({type:"info", msg:`残高 ${wei.toString()} wei`});
-    }catch(e){ addLog({type:"err", msg:"残高取得エラー: "+(e.message||e)}) }
+      log("info",`残高 ${wei} wei`);
+    }catch(e){ log("err","残高取得エラー: "+(e.message||e)); }
   };
 
-  // 送金
-  send.onclick=async()=>{
+  // 4) 送金（自分で署名して送信）
+  send.onclick = async ()=>{
     try{
-      setProvider();
-      if(!wallet) return addLog({type:"err", msg:"先にウォレットを生成/復元してください"});
-      const signer=wallet.connect(provider);
-      const toAddr=to.value.trim();
-      const amount=amt.value.trim();
-      if(!ethers.isAddress(toAddr)) return addLog({type:"err", msg:"送金先が不正です"});
-      if(!amount) return addLog({type:"err", msg:"金額を入力してください"});
+      ensureWeb3();
+      if(!account) return log("err","先にウォレットを生成/復元してください");
+      const toAddr = to.value.trim(); const amount = amt.value.trim();
+      if(!web3.utils.isAddress(toAddr)) return log("err","送金先が不正です");
+      if(!amount) return log("err","金額を入力してください");
 
-      const tx = await signer.sendTransaction({ to: toAddr, value: ethers.parseEther(amount) });
-      addLog({type:"info", msg:"送金送信", hash:tx.hash});
-      const rec=await tx.wait();
-      addLog({type: rec.status===1?"ok":"err", msg:"送金完了", hash:tx.hash});
-      check.click(); // 残高更新
-    }catch(e){ addLog({type:"err", msg:"送金エラー: "+(e.message||e)}) }
+      const nonce = await web3.eth.getTransactionCount(account.address, "latest");
+      const gasPrice = await web3.eth.getGasPrice();
+      const tx = {
+        from:  account.address,
+        to:    toAddr,
+        value: web3.utils.toWei(amount, "ether"),
+        gas:   21000,                    // ネイティブ送金の基本
+        gasPrice,
+        nonce,
+        chainId: 0x4253                 // BSSC Testnet (HEX)
+      };
+
+      const signed = await web3.eth.accounts.signTransaction(tx, account.privateKey);
+      const sent   = await web3.eth.sendSignedTransaction(signed.rawTransaction);
+      log("info", `送金送信: ${sent.transactionHash}`);
+      log(sent.status ? "ok" : "err", `送金完了: ${sent.transactionHash}`);
+      check.click();
+    }catch(e){ log("err","送金エラー: "+(e.message||e)); }
   };
-
-  // クリア
-  clear.onclick=()=>{ logs.innerHTML=""; };
 
   // 既定RPC
-  rpc.value="https://bssc-rpc.bssc.live";
+  rpc.value = "https://bssc-rpc.bssc.live";
 </script>
 </body>
 </html>
