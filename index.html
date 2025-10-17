@@ -128,7 +128,13 @@
     const logs=$("logs"), clearBtn=$("clear"), status=$("status");
 
     const LS_KEY="micro_bssc_solana_secret_b64";
-    const EXPL="https://explorer.bssc.live";
+    const EXPL = "https://explorer.bssc.live";
+// 変更前: const DEFAULT_RPC="https://bssc-rpc.bssc.live";
+const DEFAULT_RPC = location.origin + "/api/solana";
+    function ensureConn(){
+  const url = (rpc.value || "").trim() || DEFAULT_RPC;
+  return (conn = new Connection(url, "confirmed"));
+}
     const DEFAULT_RPC="https://bssc-rpc.bssc.live";
     let conn=null, wallet=null, lastFee=5000;
 
