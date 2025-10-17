@@ -8,8 +8,9 @@
   <style>
     :root{ --ph-purple:#6d28d9; --ph-indigo:#4f46e5; --stroke:rgba(255,255,255,.06); }
     .shell{ max-width:1100px; margin:0 auto; padding:32px 16px }
-    .card{ background:linear-gradient(180deg,#10111a,#0b0b10 65%); border-radius:16px; padding:20px;
-           box-shadow:0 12px 32px rgba(0,0,0,.4); border:1px solid var(--stroke) }
+    .card{ background:linear-gradient(180deg,#10111a,#0b0b10 65%);
+           border-radius:16px; padding:20px; box-shadow:0 12px 32px rgba(0,0,0,.4);
+           border:1px solid var(--stroke) }
     .primary{ background-image:linear-gradient(135deg,var(--ph-purple),var(--ph-indigo));
               color:#fff; border-radius:12px; padding:10px 16px; font-weight:700;
               box-shadow:0 8px 24px rgba(109,40,217,.35); border:1px solid rgba(255,255,255,.1);
@@ -34,6 +35,7 @@
     .tag{ font-size:11px; padding:2px 8px; border-radius:9999px; font-weight:700 }
     .tag.info{ background:#2a2e6b; color:#c7d2fe } .tag.ok{ background:#0a3c2f; color:#a7f3d0 }
     .tag.err{ background:#5f1b1b; color:#fecaca } .hover-copy{ cursor:pointer; text-decoration:underline; text-decoration-style:dotted }
+    #logs{ min-height: 120px; }
   </style>
 </head>
 <body>
@@ -56,7 +58,7 @@
       <div class="card md:col-span-2">
         <div class="text-xs uppercase text-zinc-400 mb-2">Network</div>
         <div class="flex flex-wrap gap-2">
-          <input id="rpc" class="field" placeholder="/api/solana"/>
+          <input id="rpc" class="field" placeholder="https://bssc-rpc.bssc.live/"/>
           <button id="ping" class="ghost">Ping</button>
           <a class="ghost" target="_blank" rel="noreferrer" href="https://bssc.live/#faucet">Get Test BSSC</a>
         </div>
@@ -71,11 +73,9 @@
       <div class="card space-y-3">
         <div class="text-xs uppercase text-zinc-400">Quick Actions</div>
         <div class="flex flex-wrap gap-2">
-          <button id="gen" class="primary">Generate</button>
-          <button id="save" class="ghost">Save (local)</button>
-          <button id="load" class="ghost">Load</button>
-          <button id="importRaw" class="ghost">Import (base64)</button>
-          <button id="check" class="ghost">Check Balance</button>
+          <button id="gen"        class="primary">Generate Wallet</button>
+          <button id="importRaw"  class="ghost">Recover Wallet</button>
+          <button id="check"      class="ghost">Check Balance</button>
         </div>
       </div>
     </section>
@@ -88,11 +88,13 @@
           <div id="addr" class="truncate mono">—</div>
           <div class="flex gap-2">
             <button id="copyAddr" class="ghost">Copy</button>
-            <a id="expl" class="ghost" target="_blank" rel="noreferrer">Explorer</a>
           </div>
         </div>
         <div class="text-xs uppercase text-zinc-400 mt-2">Secret (base64)</div>
-        <textarea id="sec" rows="3" class="field" placeholder="Demo only: 64-byte base64 secret key"></textarea>
+        <div class="flex gap-2">
+          <textarea id="sec" rows="3" class="field flex-1" placeholder="Demo only: 64-byte base64 secret key"></textarea>
+          <button id="copySec" class="ghost">Copy</button>
+        </div>
       </div>
 
       <div class="card space-y-3">
@@ -100,7 +102,7 @@
         <input id="to" class="field" placeholder="Recipient (Base58)"/>
         <div class="flex gap-2">
           <input id="amt" class="field" placeholder="Amount (BSSC)"/>
-          <button id="max" class="ghost">Max</button>
+          <button id="max"  class="ghost">Max</button>
           <button id="send" class="primary">Send</button>
         </div>
         <p class="text-sm text-zinc-500">1 BSSC = 1,000,000,000 lamports</p>
@@ -121,66 +123,66 @@
   <script type="module">
     import {
       Connection, Keypair, PublicKey,
-      SystemProgram, Transaction, sendAndConfirmTransaction, LAMPORTS_PER_SOL
+      SystemProgram, Transaction, sendAndConfirmTransaction,
+      LAMPORTS_PER_SOL, Message
     } from "https://esm.sh/@solana/web3.js@1.95.3?bundle";
 
-    // ------- DOM refs -------
+    // ---------- DOM ----------
     const $ = (id)=>document.getElementById(id);
     const rpc=$("rpc"), ping=$("ping"), check=$("check");
-    const gen=$("gen"), save=$("save"), load=$("load"), importRaw=$("importRaw");
-    const addr=$("addr"), sec=$("sec"), copyAddr=$("copyAddr"), expl=$("expl");
+    const gen=$("gen"), importRaw=$("importRaw");
+    const addr=$("addr"), sec=$("sec"), copyAddr=$("copyAddr"), copySec=$("copySec");
     const balEl=$("bal"), feeEl=$("fee"), upd=$("upd");
     const toEl=$("to"), amtEl=$("amt"), maxBtn=$("max"), sendBtn=$("send");
     const logs=$("logs"), clearBtn=$("clear"), status=$("status");
 
-    // ------- State -------
-    const LS_KEY="micro_bssc_solana_secret_b64";
+    // ---------- State ----------
     const EXPL="https://explorer.bssc.live";
-    const DEFAULT_RPC=location.origin + "/api/solana";  // server-side proxy
-    let conn=null, wallet=null, lastFee=5000;
+    const DEFAULT_RPC="https://bssc-rpc.bssc.live/"; // direct RPC as requested
+    let conn=null, wallet=null, feeHint=5000;
 
-    // ------- Utils -------
-    const b64e = (u8)=>btoa(String.fromCharCode(...u8));
-    const b64d = (b)=>Uint8Array.from(atob(b), c=>c.charCodeAt(0));
+    // ---------- Utils ----------
+    const b64e=(u8)=>btoa(String.fromCharCode(...u8));
+    const b64d=(b)=>Uint8Array.from(atob(b), c=>c.charCodeAt(0));
+    const sleep=(ms)=>new Promise(r=>setTimeout(r,ms));
+
     function addLog({type="info", msg, sig}){
+      const box = document.getElementById("logs"); if(!box) return;
       const row=document.createElement("div"); row.className="log-row";
       const ts=document.createElement("div"); ts.className="mono text-zinc-400"; ts.textContent=new Date().toLocaleTimeString();
       const body=document.createElement("div"); body.className="truncate";
       const tag=document.createElement("span"); tag.className=`tag ${type==="ok"?"ok":type==="err"?"err":"info"}`; tag.textContent=type.toUpperCase();
       body.appendChild(tag);
-      const span=document.createElement("span"); span.className="ml-2";
-      if(sig){ const a=document.createElement("a"); a.href=`${EXPL}/tx/${sig}`; a.target="_blank"; a.rel="noreferrer";
-        a.textContent=sig.slice(0,10)+"…"+sig.slice(-8); a.className="hover-copy"; body.appendChild(a); }
-      else{ span.textContent=msg; body.appendChild(span); }
-      row.appendChild(ts); row.appendChild(body); logs.prepend(row);
+      if (sig) {
+        const a=document.createElement("a");
+        a.href=`${EXPL}/tx/${sig}`; a.target="_blank"; a.rel="noreferrer";
+        a.textContent = " " + sig.slice(0,10)+"…"+sig.slice(-8); a.className="hover-copy";
+        body.appendChild(a);
+      } else {
+        const span=document.createElement("span"); span.className="ml-2"; span.textContent=msg; body.appendChild(span);
+      }
+      row.appendChild(ts); row.appendChild(body);
+      box.prepend(row);
+      try{ box.parentElement?.scrollIntoView({behavior:"smooth", block:"nearest"});}catch{}
     }
-    function ensureConn(){ const url=(rpc.value||"").trim() || DEFAULT_RPC; conn=new Connection(url,"confirmed"); return conn; }
 
-    // ------- Actions -------
+    function ensureConn(){
+      const url=(rpc.value||"").trim() || DEFAULT_RPC;
+      conn = new Connection(url, "confirmed");
+      return conn;
+    }
+
+    async function getLatestBH(){
+      const { blockhash, lastValidBlockHeight } = await conn.getLatestBlockhash("confirmed");
+      return { blockhash, lastValidBlockHeight };
+    }
+
+    // ---------- Actions ----------
     gen.addEventListener("click", ()=>{
       wallet = Keypair.generate();
       addr.textContent = wallet.publicKey.toBase58();
-      sec.value = b64e(wallet.secretKey);                     // demo only
-      expl.href = `${EXPL}/address/${wallet.publicKey.toBase58()}`;
+      sec.value = b64e(wallet.secretKey);
       addLog({msg:"Generated new wallet"});
-    });
-
-    save.addEventListener("click", ()=>{
-      if(!wallet) return addLog({type:"err", msg:"Generate first"});
-      localStorage.setItem(LS_KEY, b64e(wallet.secretKey));
-      addLog({type:"ok", msg:"Saved (localStorage, demo)"});
-    });
-
-    load.addEventListener("click", ()=>{
-      const raw = localStorage.getItem(LS_KEY);
-      if(!raw) return addLog({type:"err", msg:"No saved secret"});
-      try{
-        wallet = Keypair.fromSecretKey(b64d(raw));
-        addr.textContent = wallet.publicKey.toBase58();
-        sec.value = raw;
-        expl.href = `${EXPL}/address/${wallet.publicKey.toBase58()}`;
-        addLog({type:"ok", msg:"Loaded from localStorage"});
-      }catch(e){ addLog({type:"err", msg:"Load error: "+(e.message||e)}); }
     });
 
     importRaw.addEventListener("click", ()=>{
@@ -189,15 +191,17 @@
         wallet = Keypair.fromSecretKey(b64d(raw.trim()));
         addr.textContent = wallet.publicKey.toBase58();
         sec.value = raw.trim();
-        expl.href = `${EXPL}/address/${wallet.publicKey.toBase58()}`;
-        addLog({type:"ok", msg:"Imported base64 secret"});
-      }catch(e){ addLog({type:"err", msg:"Import failed: "+(e.message||e)}); }
+        addLog({type:"ok", msg:"Recovered wallet from base64 secret"});
+      }catch(e){ addLog({type:"err", msg:"Recover failed: "+(e.message||e)}); }
     });
 
     copyAddr.addEventListener("click", async ()=>{
-      const a = addr.textContent.trim(); if(!a || a==="—") return;
-      await navigator.clipboard.writeText(a);
-      addLog({type:"ok", msg:"Address copied"});
+      const a=addr.textContent.trim(); if(!a || a==="—") return;
+      await navigator.clipboard.writeText(a); addLog({type:"ok", msg:"Address copied"});
+    });
+    copySec.addEventListener("click", async ()=>{
+      const s=sec.value.trim(); if(!s) return;
+      await navigator.clipboard.writeText(s); addLog({type:"ok", msg:"Secret (base64) copied"});
     });
 
     ping.addEventListener("click", async ()=>{
@@ -206,18 +210,19 @@
         const t0=performance.now();
         const slot = await conn.getSlot("confirmed");
         const ms = Math.round(performance.now()-t0);
-        feeEl.textContent = lastFee.toLocaleString();
+        feeEl.textContent = feeHint.toLocaleString();
         upd.textContent = new Date().toLocaleTimeString();
         status.style.display="inline-flex"; status.className="pill ok";
         addLog({msg:`Ping OK (slot ${slot}, ${ms}ms)`});
-      }catch(e){ status.style.display="inline-flex"; status.className="pill err";
-        addLog({type:"err", msg:"Ping failed: "+(e.message||e)}); }
+      }catch(e){
+        status.style.display="inline-flex"; status.className="pill err";
+        addLog({type:"err", msg:"Ping failed: "+(e.message||e)});
+      }
     });
 
     check.addEventListener("click", async ()=>{
       try{
-        ensureConn();
-        if(!wallet) return addLog({type:"err", msg:"Generate first"});
+        ensureConn(); if(!wallet) return addLog({type:"err", msg:"Generate first"});
         const lamports = await conn.getBalance(wallet.publicKey,"confirmed");
         balEl.textContent = (lamports / LAMPORTS_PER_SOL) + " BSSC";
         upd.textContent = new Date().toLocaleTimeString();
@@ -229,34 +234,87 @@
       try{
         ensureConn(); if(!wallet) return addLog({type:"err", msg:"Generate first"});
         const lamports = await conn.getBalance(wallet.publicKey,"confirmed");
-        const sendable = Math.max(0, lamports - lastFee); // approx fee
+        const sendable = Math.max(0, lamports - feeHint);
         amtEl.value = (sendable / LAMPORTS_PER_SOL).toString();
-        addLog({msg:`Max computed (fee ≈ ${lastFee} lamports)`});
+        addLog({msg:`Max computed (fee ≈ ${feeHint} lamports)`});
       }catch(e){ addLog({type:"err", msg:"Max error: "+(e.message||e)}); }
     });
 
+    // sendRawTransaction(base64) → fallback(sendTransaction) → confirm
     sendBtn.addEventListener("click", async ()=>{
       try{
         ensureConn();
         if(!wallet) return addLog({type:"err", msg:"Generate first"});
         const to = (toEl.value||"").trim();
-        const amount = (amtEl.value||"").trim();
+        const amount = Number(amtEl.value||"0");
         if(!to || !amount) return addLog({type:"err", msg:"Enter recipient & amount"});
+
         let toPk; try{ toPk = new PublicKey(to); }catch{ return addLog({type:"err", msg:"Recipient must be Base58 (Solana)"}); }
 
-        const lamports = Math.round(Number(amount) * LAMPORTS_PER_SOL);
-        const tx = new Transaction().add(
-          SystemProgram.transfer({ fromPubkey: wallet.publicKey, toPubkey: toPk, lamports })
-        );
-        const sig = await sendAndConfirmTransaction(conn, tx, [wallet], {commitment:"confirmed"});
+        sendBtn.disabled = true; sendBtn.textContent = "Sending…";
+
+        const lamports = Math.round(amount * LAMPORTS_PER_SOL);
+        const { blockhash, lastValidBlockHeight } = await getLatestBH();
+        const tx = new Transaction({ recentBlockhash:blockhash, feePayer:wallet.publicKey })
+          .add(SystemProgram.transfer({ fromPubkey: wallet.publicKey, toPubkey: toPk, lamports }));
+
+        // fee/balance pre-check（概算）
+        const bal = await conn.getBalance(wallet.publicKey,"confirmed");
+        if (bal < lamports + feeHint) {
+          const need = ((lamports+feeHint - bal)/LAMPORTS_PER_SOL).toFixed(9);
+          sendBtn.disabled=false; sendBtn.textContent="Send";
+          return addLog({type:"err", msg:`Insufficient funds (+${need} BSSC incl. fee)`});
+        }
+
+        // sign → base64
+        tx.sign(wallet);
+        const raw = tx.serialize();
+        const b64 = btoa(String.fromCharCode(...raw));
+
+        // 送信（raw優先）
+        let sig;
+        try {
+          const r = await fetch(DEFAULT_RPC, {
+            method:"POST", headers:{ "content-type":"application/json" },
+            body: JSON.stringify({ jsonrpc:"2.0", id:Date.now(), method:"sendRawTransaction",
+              params:[b64, { skipPreflight:false, maxRetries:3 }] })
+          });
+          const j = await r.json();
+          if (j.error) throw new Error(j.error.message || "sendRawTransaction failed");
+          sig = j.result;
+        } catch(e) {
+          // fallback: sendTransaction(encoding:base64)
+          const r2 = await fetch(DEFAULT_RPC, {
+            method:"POST", headers:{ "content-type":"application/json" },
+            body: JSON.stringify({ jsonrpc:"2.0", id:Date.now(), method:"sendTransaction",
+              params:[b64, { skipPreflight:false, maxRetries:3, encoding:"base64" }] })
+          });
+          const j2 = await r2.json();
+          if (j2.error) throw new Error(j2.error.message || "sendTransaction failed");
+          sig = j2.result;
+        }
+
+        // Activity に即出す
+        addLog({type:"info", msg:"TX sent", sig});
+
+        // confirm（強め）
+        await conn.confirmTransaction({ signature:sig, blockhash, lastValidBlockHeight }, "confirmed");
         addLog({type:"ok", msg:"TX confirmed", sig});
         check.click();
-      }catch(e){ addLog({type:"err", msg:"Send error: "+(e.message||e)}); }
+
+      } catch(e){
+        // 例外に署名が含まれているときはリンク化
+        const m = (e.message||"").match(/[1-9A-Za-z]{87,}/);
+        if (m) addLog({type:"err", msg:"Confirm error (see explorer)", sig:m[0]});
+        else   addLog({type:"err", msg:"Send error: "+(e.message||e)});
+      } finally {
+        sendBtn.disabled=false; sendBtn.textContent="Send";
+      }
     });
 
     clearBtn.addEventListener("click", ()=>{ logs.innerHTML=""; });
 
-    // default RPC for proxy
+    // default network
     rpc.value = DEFAULT_RPC;
   </script>
 </body>
