@@ -1,5 +1,5 @@
 <!doctype html>
-<html lang="ja" class="h-full bg-[#0b0b10] text-zinc-100">
+<html lang="en" class="h-full bg-[#0b0b10] text-zinc-100">
 <head>
   <meta charset="utf-8"/>
   <meta name="viewport" content="width=device-width,initial-scale=1"/>
@@ -7,9 +7,7 @@
   <script src="https://cdn.tailwindcss.com"></script>
   <style>
     :root{
-      --ph-purple:#6d28d9;     /* Phantom 寄せの紫 */
-      --ph-indigo:#4f46e5;
-      --stroke:rgba(255,255,255,.06);
+      --ph-purple:#6d28d9; --ph-indigo:#4f46e5; --stroke:rgba(255,255,255,.06);
     }
     .shell{ max-width: 1100px; margin: 0 auto; padding: 32px 16px }
     .card{ background: linear-gradient(180deg,#10111a,#0b0b10 65%);
@@ -18,33 +16,28 @@
            border: 1px solid var(--stroke); }
     .primary{
       background-image: linear-gradient(135deg,var(--ph-purple),var(--ph-indigo));
-      color: #fff; border-radius: 12px; padding: 10px 16px; font-weight: 700;
-      box-shadow: 0 8px 24px rgba(109,40,217,.35);
-      transition: .12s ease; border: 1px solid rgba(255,255,255,.1);
+      color:#fff; border-radius:12px; padding:10px 16px; font-weight:700;
+      box-shadow:0 8px 24px rgba(109,40,217,.35);
+      transition:.12s ease; border:1px solid rgba(255,255,255,.1);
     }
-    .primary:hover{ filter: brightness(1.12); transform: translateY(-1px) }
-    .primary:active{ transform: translateY(0) scale(.98) }
+    .primary:hover{ filter:brightness(1.12); transform:translateY(-1px) }
+    .primary:active{ transform:translateY(0) scale(.98) }
     .ghost{
-      background: #ffffff0f; color: #e5e7eb; border-radius: 12px; padding: 10px 16px;
-      border: 1px solid rgba(255,255,255,.1); transition: .12s ease;
+      background:#ffffff0f; color:#e5e7eb; border-radius:12px; padding:10px 16px;
+      border:1px solid rgba(255,255,255,.1); transition:.12s ease;
     }
-    .ghost:hover{ background:#ffffff1c }
-    .ghost:active{ transform: scale(.98) }
-    .field{ width:100%; background:#0f1117; color:#e5e7eb;
-            border:1px solid var(--stroke); border-radius:12px; padding:10px 12px; outline:none }
+    .ghost:hover{ background:#ffffff1c } .ghost:active{ transform:scale(.98) }
+    .field{ width:100%; background:#0f1117; color:#e5e7eb; border:1px solid var(--stroke);
+            border-radius:12px; padding:10px 12px; outline:none }
     .field::placeholder{ color:#9ca3af }
-    .mono{ font-variant-numeric: tabular-nums }
+    .mono{ font-variant-numeric:tabular-nums }
     .divider{ height:1px; background:linear-gradient(90deg,transparent,#ffffff12,transparent); margin:10px 0 }
     .pill{ display:inline-flex; align-items:center; gap:8px; border-radius:9999px; padding:6px 12px; font-weight:600; }
     .pill.ok  { background:rgba(34,197,94,.12); color:#86efac; border:1px solid rgba(34,197,94,.28) }
     .pill.slow{ background:rgba(245,158,11,.12); color:#fbbf24; border:1px solid rgba(245,158,11,.28) }
     .pill.err { background:rgba(244,63,94,.12);  color:#fca5a5; border:1px solid rgba(244,63,94,.28) }
-
-    /* Phantom っぽい “白チップ”（濃い文字） */
     .chip{ display:inline-flex; align-items:center; gap:8px; padding:6px 10px;
            border-radius:9999px; background:#fff; color:#0b0b10; border:1px solid #e5e7eb; font-weight:600 }
-
-    /* ログ（行カード） */
     .log-row{ display:grid; grid-template-columns: 110px minmax(0,1fr) auto;
               align-items:center; gap:12px; padding:10px 12px; border-radius:12px;
               background:#10111a; border:1px solid var(--stroke) }
@@ -52,9 +45,7 @@
     .tag.info{ background:#2a2e6b; color:#c7d2fe }
     .tag.ok  { background:#0a3c2f; color:#a7f3d0 }
     .tag.err { background:#5f1b1b; color:#fecaca }
-    .hover-copy{ cursor:pointer; text-decoration: underline; text-decoration-style:dotted }
-
-    /* トースト（白背景＋黒文字で視認性◎） */
+    .hover-copy{ cursor:pointer; text-decoration:underline; text-decoration-style:dotted }
     .toast{ position:fixed; right:18px; top:18px; z-index:50; display:none }
     .toast.show{ display:block; animation:fadein .15s ease-out }
     @keyframes fadein{ from{opacity:0; transform:translateY(-6px)} to{opacity:1; transform:none} }
@@ -62,7 +53,7 @@
 </head>
 <body>
   <main class="shell space-y-6">
-    <!-- ヘッダー -->
+    <!-- Header -->
     <header class="flex items-center justify-between">
       <div class="flex items-center gap-3">
         <div class="w-9 h-9 rounded-xl ring-1 ring-white/10"
@@ -75,43 +66,42 @@
       </div>
     </header>
 
-    <!-- ネットワーク & クイック -->
+    <!-- Network & Quick -->
     <section class="grid md:grid-cols-3 gap-4">
       <div class="card md:col-span-2">
         <div class="text-xs uppercase text-zinc-400 tracking-wider mb-2">Network</div>
-        <div class="flex gap-2">
+        <div class="flex flex-wrap gap-2">
           <input id="rpc" class="field" placeholder="https://bssc-rpc.bssc.live"/>
           <button id="ping" class="ghost">Ping</button>
+          <a id="faucet" class="ghost" target="_blank" rel="noreferrer"
+             href="https://bssc.live/#faucet">Get Test BNB</a>
         </div>
         <div class="divider"></div>
         <div class="grid grid-cols-3 gap-4">
-          <div>
-            <div class="text-xs uppercase text-zinc-400 tracking-wider">Balance</div>
-            <div id="bal" class="text-2xl font-semibold mono mt-1">—</div>
-          </div>
-          <div>
-            <div class="text-xs uppercase text-zinc-400 tracking-wider">Gas price</div>
-            <div id="gas" class="text-2xl font-semibold mono mt-1">—</div>
-          </div>
-          <div>
-            <div class="text-xs uppercase text-zinc-400 tracking-wider">Last update</div>
-            <div id="upd" class="mt-1 text-zinc-300">—</div>
-          </div>
+          <div><div class="text-xs uppercase text-zinc-400 tracking-wider">Balance</div>
+            <div id="bal" class="text-2xl font-semibold mono mt-1">—</div></div>
+          <div><div class="text-xs uppercase text-zinc-400 tracking-wider">Gas price</div>
+            <div id="gas" class="text-2xl font-semibold mono mt-1">—</div></div>
+          <div><div class="text-xs uppercase text-zinc-400 tracking-wider">Last update</div>
+            <div id="upd" class="mt-1 text-zinc-300">—</div></div>
         </div>
       </div>
 
       <div class="card space-y-3">
         <div class="text-xs uppercase text-zinc-400 tracking-wider">Quick Actions</div>
         <div class="flex flex-wrap gap-2">
-          <button id="gen" class="primary">Generate</button>
-          <button id="save" class="ghost">Save (local)</button>
-          <button id="load" class="ghost">Load</button>
-          <button id="check" class="ghost">Check Balance</button>
+          <button id="gen"        class="primary">Generate</button>
+          <button id="save"       class="ghost">Save (local)</button>
+          <button id="load"       class="ghost">Load</button>
+          <button id="importPriv" class="ghost">Import (privkey)</button>
+          <button id="exportEnc"  class="ghost">Export (encrypted)</button>
+          <button id="importEnc"  class="ghost">Unlock (encrypted)</button>
+          <button id="check"      class="ghost">Check Balance</button>
         </div>
       </div>
     </section>
 
-    <!-- ウォレット & 送金 -->
+    <!-- Wallet / Send -->
     <section class="grid md:grid-cols-2 gap-4">
       <div class="card space-y-3">
         <div class="text-xs uppercase text-zinc-400 tracking-wider">Your Wallet</div>
@@ -124,7 +114,7 @@
         </div>
         <div class="text-xs uppercase text-zinc-400 tracking-wider mt-2">Private Key (demo)</div>
         <textarea id="pk" rows="3" class="field"
-          placeholder="※デモ用：本番は必ず暗号化保存してください"></textarea>
+          placeholder="* Demo only: always encrypt the private key in production."></textarea>
       </div>
 
       <div class="card space-y-3">
@@ -132,9 +122,10 @@
         <input id="to"  class="field" placeholder="Recipient (0x… EVM address)"/>
         <div class="flex gap-2">
           <input id="amt" class="field" placeholder="Amount (BNB)"/>
+          <button id="max"  class="ghost">Max</button>
           <button id="send" class="primary">Send</button>
         </div>
-        <p class="text-sm text-zinc-500">* テスト送金には testnet BNB が必要です。</p>
+        <p class="text-sm text-zinc-500">* Testnet BNB is required for fees.</p>
       </div>
     </section>
 
@@ -148,7 +139,7 @@
     </section>
   </main>
 
-  <!-- Toast（白背景＋黒文字で視認性◎） -->
+  <!-- Toast (white background / dark text for readability) -->
   <div id="toast" class="toast">
     <div class="rounded-xl px-3 py-2 bg-white text-black shadow-xl ring-1 ring-black/10 flex items-center gap-2">
       <svg width="18" height="18" viewBox="0 0 24 24" fill="none"><path d="M12 9v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" stroke="#10b981" stroke-width="2" stroke-linecap="round"/></svg>
@@ -156,37 +147,33 @@
     </div>
   </div>
 
-  <!-- Web3.js v4（MetaMask不要, 署名→送信） -->
+  <!-- Web3.js v4 (no MetaMask; local signing) -->
   <script src="https://cdn.jsdelivr.net/npm/web3@4.7.0/dist/web3.min.js"></script>
   <script>
     const $ = (id)=>document.getElementById(id);
 
-    // DOM
-    const rpc = $("rpc"), ping=$("ping"), gen=$("gen"), save=$("save"), load=$("load"), check=$("check");
+    // DOM refs
+    const rpc=$("rpc"), ping=$("ping"), gen=$("gen"), save=$("save"), load=$("load"), check=$("check");
+    const importPriv=$("importPriv"), exportEnc=$("exportEnc"), importEnc=$("importEnc");
     const addr=$("addr"), pk=$("pk"), copyAddr=$("copyAddr"), expl=$("expl");
     const bal=$("bal"), gas=$("gas"), upd=$("upd");
-    const to=$("to"), amt=$("amt"), sendBtn=$("send");
+    const to=$("to"), amt=$("amt"), maxBtn=$("max"), sendBtn=$("send");
     const logs=$("logs"), clearBtn=$("clear");
-    const statusPill=$("statusPill"), statusText=$("statusText");
+    const statusPill=$("statusPill");
     const toast=$("toast"), toastText=$("toastText");
 
-    // 状態
+    // State
     const LS_KEY="micro_bssc_wallet_priv";
-    let web3=null;               // Web3（ネットワーク用）
-    let web3Local=null;          // Web3（ローカル用：鍵生成/復元）
+    let web3=null;               // network Web3
+    let web3Local=null;          // local-only Web3 (accounts/utils)
     let account=null;            // { address, privateKey }
+    const CHAIN_ID_HEX = "0x4253"; // BSSC Testnet
 
-    // 初期化（Generate対策：providerなしWeb3）
-    web3Local = new Web3(); // ← これがあると accounts.create()/privateKeyToAccount() が必ず使える
+    // Init: provider-less Web3 for local key ops (fixes generate/import regardless of RPC)
+    web3Local = new Web3();
 
     // Helpers
     function showToast(t){ toastText.textContent=t; toast.classList.add("show"); setTimeout(()=>toast.classList.remove("show"),1300); }
-    function setStatus(state){ // ok/slow/err
-      statusPill.style.display="inline-flex";
-      statusPill.className = "pill " + (state==="ok"?"ok":state==="slow"?"slow":"err");
-      const dot = state==="ok"?"bg-emerald-400":state==="slow"?"bg-amber-400":"bg-rose-400";
-      statusPill.innerHTML = `<span class="w-2 h-2 rounded-full ${dot}"></span><span id="statusText">${state.toUpperCase()}</span>`;
-    }
     function addLog({type="info", msg, hash}){
       const row=document.createElement("div"); row.className="log-row";
       const ts=document.createElement("div"); ts.className="mono text-zinc-400"; ts.textContent=new Date().toLocaleTimeString();
@@ -207,116 +194,190 @@
       row.appendChild(ts); row.appendChild(body); row.appendChild(tail);
       logs.prepend(row);
     }
+    function setStatus(state){ // ok/slow/err
+      statusPill.style.display="inline-flex";
+      statusPill.className = "pill " + (state==="ok"?"ok":state==="slow"?"slow":"err");
+      const dot = state==="ok"?"bg-emerald-400":state==="slow"?"bg-amber-400":"bg-rose-400";
+      statusPill.innerHTML = `<span class="w-2 h-2 rounded-full ${dot}"></span><span>${state.toUpperCase()}</span>`;
+    }
     function ensureWeb3(){
-      const url=(rpc.value||"").trim(); if(!url) throw new Error("RPC URL を入力してください");
+      const url=(rpc.value||"").trim(); if(!url) throw new Error("Enter RPC URL");
       web3 = new Web3(new Web3.providers.HttpProvider(url));
       return web3;
     }
 
-    // ウォレット生成/保存/復元（Generate 修正済み）
+    // Generate / Save / Load
     gen.onclick = ()=>{
-      const w = web3Local.eth.accounts.create(); // ← provider不要のローカル生成
+      const w = web3Local.eth.accounts.create(); // local generate (no RPC)
       account = w;
       addr.textContent = w.address;
-      pk.value = w.privateKey; // デモ保存（本番は暗号化）
+      pk.value = w.privateKey; // demo only — encrypt in production
       expl.href = "https://explorer.bssc.live/address/"+w.address;
-      addLog({type:"info", msg:"新しいウォレットを生成しました"});
+      addLog({type:"info", msg:"Generated new wallet"});
     };
     save.onclick = ()=>{
-      if(!account) return addLog({type:"err", msg:"先にウォレットを生成してください"});
+      if(!account) return addLog({type:"err", msg:"Generate a wallet first"});
       localStorage.setItem(LS_KEY, account.privateKey);
-      addLog({type:"ok", msg:"ローカルに秘密鍵を保存しました（デモ）"});
-    };
+      addLog({type:"ok", msg:"Saved to localStorage (demo)"}); };
     load.onclick = ()=>{
       const priv = localStorage.getItem(LS_KEY);
-      if(!priv) return addLog({type:"err", msg:"保存された秘密鍵がありません"});
+      if(!priv) return addLog({type:"err", msg:"No saved key found"});
       try{
-        account = web3Local.eth.accounts.privateKeyToAccount(priv); // ← ローカルで復元
+        account = web3Local.eth.accounts.privateKeyToAccount(priv);
         addr.textContent = account.address; pk.value = priv;
         expl.href = "https://explorer.bssc.live/address/"+account.address;
-        addLog({type:"ok", msg:"ローカルからウォレットを復元しました"});
-      }catch(e){ addLog({type:"err", msg:"復元エラー: "+(e.message||e)}) }
+        addLog({type:"ok", msg:"Loaded from localStorage"});
+      }catch(e){ addLog({type:"err", msg:"Load error: "+(e.message||e)}) }
     };
     copyAddr.onclick = async ()=>{
       const a=addr.textContent.trim(); if(!a || a==="—") return;
       await navigator.clipboard.writeText(a); showToast("Address copied");
     };
 
-    // Ping（eth_* を直叩き）
+    // Import privkey (0x…)
+    importPriv.onclick = ()=>{
+      const priv=prompt("Paste your private key (0x...)"); if(!priv) return;
+      const p=priv.trim();
+      if(!/^0x[0-9a-fA-F]{64}$/.test(p)) return addLog({type:"err", msg:"Invalid format (0x + 64 hex)"});
+      try{
+        account = web3Local.eth.accounts.privateKeyToAccount(p);
+        addr.textContent=account.address; pk.value=p;
+        expl.href="https://explorer.bssc.live/address/"+account.address;
+        addLog({type:"ok", msg:"Imported private key"});
+      }catch(e){ addLog({type:"err", msg:"Import failed: "+(e.message||e)}) }
+    };
+
+    // AES-GCM backup/restore
+    async function encryptPrivKey(privHex, password){
+      const enc=new TextEncoder(); const salt=crypto.getRandomValues(new Uint8Array(16)); const iv=crypto.getRandomValues(new Uint8Array(12));
+      const keyMat=await crypto.subtle.importKey("raw", enc.encode(password), "PBKDF2", false, ["deriveKey"]);
+      const key=await crypto.subtle.deriveKey({name:"PBKDF2", salt, iterations:150000, hash:"SHA-256"}, keyMat, {name:"AES-GCM", length:256}, false, ["encrypt","decrypt"]);
+      const ct=await crypto.subtle.encrypt({name:"AES-GCM", iv}, key, enc.encode(privHex));
+      const b64 = u8=>btoa(String.fromCharCode(...u8));
+      return { kdf:"PBKDF2", hash:"SHA-256", it:150000, salt:b64(salt), iv:b64(iv), ct:b64(new Uint8Array(ct)) };
+    }
+    async function decryptPrivKey(ks, password){
+      const enc=new TextEncoder(); const dec=new TextDecoder();
+      const b64d=s=>Uint8Array.from(atob(s),c=>c.charCodeAt(0));
+      const keyMat=await crypto.subtle.importKey("raw", enc.encode(password), "PBKDF2", false, ["deriveKey"]);
+      const key=await crypto.subtle.deriveKey({name:"PBKDF2", salt:b64d(ks.salt), iterations:ks.it, hash:ks.hash}, keyMat, {name:"AES-GCM", length:256}, false, ["encrypt","decrypt"]);
+      const pt=await crypto.subtle.decrypt({name:"AES-GCM", iv:b64d(ks.iv)}, key, b64d(ks.ct)); return new TextDecoder().decode(pt);
+    }
+    exportEnc.onclick = async ()=>{
+      try{
+        if(!account) return addLog({type:"err", msg:"Generate/Load a wallet first"});
+        const pw=prompt("Set password for encrypted backup (>=6 chars)"); if(!pw || pw.length<6) return addLog({type:"err", msg:"Password too short"});
+        const ks = await encryptPrivKey(account.privateKey, pw);
+        const blob = new Blob([JSON.stringify(ks,null,2)], {type:"application/json"});
+        const url = URL.createObjectURL(blob); const a=document.createElement("a");
+        a.href=url; a.download=`bssc-keystore-${account.address}.json`; a.click(); URL.revokeObjectURL(url);
+        localStorage.setItem("micro_bssc_keystore", JSON.stringify(ks));
+        addLog({type:"ok", msg:"Encrypted backup saved (file + localStorage)"}); }
+      catch(e){ addLog({type:"err", msg:"Export failed: "+(e.message||e)}) }
+    };
+    importEnc.onclick = async ()=>{
+      try{
+        let ks; const useFile = confirm("Read keystore from file?\nCancel = from localStorage");
+        if(useFile){
+          const input=document.createElement("input"); input.type="file"; input.accept="application/json";
+          await new Promise(r=>{ input.onchange=r; input.click(); });
+          if(!input.files || !input.files[0]) return;
+          ks = JSON.parse(await input.files[0].text());
+        }else{
+          const raw=localStorage.getItem("micro_bssc_keystore"); if(!raw) return addLog({type:"err", msg:"No keystore in localStorage"});
+          ks = JSON.parse(raw);
+        }
+        const pw=prompt("Enter password"); if(!pw) return;
+        const priv=await decryptPrivKey(ks, pw);
+        if(!/^0x[0-9a-fA-F]{64}$/.test(priv)) throw new Error("Invalid decrypted privkey");
+        account = web3Local.eth.accounts.privateKeyToAccount(priv);
+        addr.textContent=account.address; pk.value=priv; expl.href="https://explorer.bssc.live/address/"+account.address;
+        addLog({type:"ok", msg:"Restored from encrypted backup"});
+      }catch(e){ addLog({type:"err", msg:"Unlock failed: "+(e.message||e)}) }
+    };
+
+    // Ping (direct eth_* calls)
     ping.onclick = async ()=>{
       try{
         ensureWeb3();
-        const t0 = performance.now();
-        const block  = await web3.eth.getBlockNumber();     // eth_blockNumber
-        const gasWei = await web3.eth.getGasPrice();        // eth_gasPrice
-        const ms = Math.round(performance.now() - t0);
-
-        gas.textContent = (Number(gasWei)/1e9).toFixed(3) + " gwei";
-        upd.textContent = new Date().toLocaleTimeString();
+        const t0=performance.now();
+        const chainId = await web3.eth.getChainId?.();
+        const block   = await web3.eth.getBlockNumber();
+        let gasWei; try{ gasWei = await web3.eth.getGasPrice(); } catch{ gasWei = web3.utils.toWei("1","gwei"); }
+        const ms=Math.round(performance.now()-t0);
+        gas.textContent=(Number(gasWei)/1e9).toFixed(3)+" gwei";
+        upd.textContent=new Date().toLocaleTimeString();
         setStatus(ms<800?"ok":ms<1500?"slow":"err");
+        if(chainId && "0x"+chainId.toString(16) !== CHAIN_ID_HEX)
+          addLog({type:"err", msg:`Different network (chainId: 0x${chainId.toString(16)})`});
         addLog({type:"info", msg:`Ping OK (block ${block}, ${ms}ms)`});
-      }catch(e){
-        setStatus("err");
-        addLog({type:"err", msg:"Ping失敗: "+(e.message||e)});
-      }
+      }catch(e){ setStatus("err"); addLog({type:"err", msg:"Ping failed: "+(e.message||e)}); }
     };
 
-    // 残高
+    // Balance
     check.onclick = async ()=>{
       try{
         ensureWeb3();
-        if(!account) return addLog({type:"err", msg:"先にウォレットを生成/復元してください"});
-        const wei = await web3.eth.getBalance(account.address);  // eth_getBalance
-        bal.textContent = (Number(wei)/1e18) + " BNB";
-        upd.textContent = new Date().toLocaleTimeString();
-        addLog({type:"info", msg:`残高 ${wei} wei`});
-      }catch(e){
-        addLog({type:"err", msg:"残高取得エラー: "+(e.message||e)});
-      }
+        if(!account) return addLog({type:"err", msg:"Generate/Load a wallet first"});
+        const wei=await web3.eth.getBalance(account.address);
+        bal.textContent=(Number(wei)/1e18)+" BNB";
+        upd.textContent=new Date().toLocaleTimeString();
+        addLog({type:"info", msg:`Balance ${wei} wei`});
+      }catch(e){ addLog({type:"err", msg:"Balance error: "+(e.message||e)}); }
     };
 
-    // 送金（ローカル署名 → ブロードキャスト）
-    $("send").onclick = async ()=>{
+    // Max (sendable amount minus gas)
+    maxBtn.onclick = async ()=>{
+      try{
+        ensureWeb3(); if(!account) return addLog({type:"err", msg:"Generate/Load a wallet first"});
+        const wei = BigInt(await web3.eth.getBalance(account.address));
+        let gasPrice; try{ gasPrice = BigInt(await web3.eth.getGasPrice()); } catch { gasPrice = BigInt(web3.utils.toWei("1","gwei")); }
+        const fee = gasPrice * 21000n;
+        const sendable = wei>fee ? (wei-fee) : 0n;
+        amt.value = (Number(sendable)/1e18).toString();
+        addLog({type:"info", msg:`Max computed (fee ${fee.toString()} wei)`});
+      }catch(e){ addLog({type:"err", msg:"Max error: "+(e.message||e)}); }
+    };
+
+    // Send (local sign → broadcast)
+    sendBtn.onclick = async ()=>{
       try{
         ensureWeb3();
-        if(!account) return addLog({type:"err", msg:"先にウォレットを生成/復元してください"});
+        if(!account) return addLog({type:"err", msg:"Generate/Load a wallet first"});
+        const toAddr=(to.value||"").trim(); const amount=(amt.value||"").trim();
+        if(!web3.utils.isAddress(toAddr)) return addLog({type:"err", msg:"Invalid recipient"});
+        if(!amount) return addLog({type:"err", msg:"Enter amount"});
 
-        const toAddr = (to.value||"").trim();
-        const amount = (amt.value||"").trim();
-        if(!web3.utils.isAddress(toAddr)) return addLog({type:"err", msg:"送金先が不正です"});
-        if(!amount) return addLog({type:"err", msg:"金額を入力してください"});
+        const nonce   = await web3.eth.getTransactionCount(account.address, "latest");
+        let gasPrice; try{ gasPrice = await web3.eth.getGasPrice(); } catch { gasPrice = web3.utils.toWei("1","gwei"); }
 
-        const nonce    = await web3.eth.getTransactionCount(account.address, "latest");
-        const gasPrice = await web3.eth.getGasPrice();
         const tx = {
-          from:  account.address,
-          to:    toAddr,
+          from: account.address, to: toAddr,
           value: web3.utils.toWei(amount, "ether"),
-          gas:   21000,
-          gasPrice,
-          nonce,
-          chainId: 0x4253    // BSSC Testnet
+          gas: 21000, gasPrice, nonce,
+          chainId: parseInt(CHAIN_ID_HEX,16)
         };
 
-        const signed   = await web3.eth.accounts.signTransaction(tx, account.privateKey);
+        // Local sign with web3Local (no RPC dependency)
+        const signed = await web3Local.eth.accounts.signTransaction(tx, account.privateKey);
+
+        // Broadcast + nice logs
         const receiptP = new Promise((resolve, reject)=>{
           web3.eth.sendSignedTransaction(signed.rawTransaction)
-            .on("transactionHash", (hash)=> addLog({type:"info", msg:"送金送信", hash}))
+            .on("transactionHash", (hash)=> addLog({type:"info", msg:"TX sent", hash}))
             .on("receipt", (rc)=> resolve(rc))
             .on("error", (err)=> reject(err));
         });
         const rc = await receiptP;
-        addLog({type: rc.status ? "ok" : "err", msg:"送金完了", hash: rc.transactionHash});
+        addLog({type: rc.status ? "ok" : "err", msg:"TX confirmed", hash: rc.transactionHash});
         check.click();
-      }catch(e){
-        addLog({type:"err", msg:"送金エラー: "+(e.message||e)});
-      }
+      }catch(e){ addLog({type:"err", msg:"Send error: "+(e.message||e)}); }
     };
 
-    // クリア
-    $("clear").onclick = ()=>{ logs.innerHTML=""; };
+    // Clear Activity
+    clearBtn.onclick = ()=>{ logs.innerHTML=""; };
 
-    // 既定 RPC
+    // Default RPC
     rpc.value = "https://bssc-rpc.bssc.live";
   </script>
 </body>
