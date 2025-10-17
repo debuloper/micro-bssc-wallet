@@ -9,7 +9,6 @@
     :root{
       --ph-purple:#6d28d9;     /* Phantom 寄せの紫 */
       --ph-indigo:#4f46e5;
-      --surface:#0f1016;
       --stroke:rgba(255,255,255,.06);
     }
     .shell{ max-width: 1100px; margin: 0 auto; padding: 32px 16px }
@@ -55,7 +54,7 @@
     .tag.err { background:#5f1b1b; color:#fecaca }
     .hover-copy{ cursor:pointer; text-decoration: underline; text-decoration-style:dotted }
 
-    /* トースト（白地×黒字で可読） */
+    /* トースト（白背景＋黒文字で視認性◎） */
     .toast{ position:fixed; right:18px; top:18px; z-index:50; display:none }
     .toast.show{ display:block; animation:fadein .15s ease-out }
     @keyframes fadein{ from{opacity:0; transform:translateY(-6px)} to{opacity:1; transform:none} }
@@ -173,8 +172,12 @@
 
     // 状態
     const LS_KEY="micro_bssc_wallet_priv";
-    let web3=null;               // Web3 インスタンス
+    let web3=null;               // Web3（ネットワーク用）
+    let web3Local=null;          // Web3（ローカル用：鍵生成/復元）
     let account=null;            // { address, privateKey }
+
+    // 初期化（Generate対策：providerなしWeb3）
+    web3Local = new Web3(); // ← これがあると accounts.create()/privateKeyToAccount() が必ず使える
 
     // Helpers
     function showToast(t){ toastText.textContent=t; toast.classList.add("show"); setTimeout(()=>toast.classList.remove("show"),1300); }
@@ -210,9 +213,9 @@
       return web3;
     }
 
-    // ウォレット生成/保存/復元
+    // ウォレット生成/保存/復元（Generate 修正済み）
     gen.onclick = ()=>{
-      const w = Web3.eth.accounts.create(); // { address, privateKey }
+      const w = web3Local.eth.accounts.create(); // ← provider不要のローカル生成
       account = w;
       addr.textContent = w.address;
       pk.value = w.privateKey; // デモ保存（本番は暗号化）
@@ -228,7 +231,7 @@
       const priv = localStorage.getItem(LS_KEY);
       if(!priv) return addLog({type:"err", msg:"保存された秘密鍵がありません"});
       try{
-        account = Web3.eth.accounts.privateKeyToAccount(priv);
+        account = web3Local.eth.accounts.privateKeyToAccount(priv); // ← ローカルで復元
         addr.textContent = account.address; pk.value = priv;
         expl.href = "https://explorer.bssc.live/address/"+account.address;
         addLog({type:"ok", msg:"ローカルからウォレットを復元しました"});
@@ -244,8 +247,8 @@
       try{
         ensureWeb3();
         const t0 = performance.now();
-        const block = await web3.eth.getBlockNumber();     // eth_blockNumber
-        const gasWei = await web3.eth.getGasPrice();       // eth_gasPrice
+        const block  = await web3.eth.getBlockNumber();     // eth_blockNumber
+        const gasWei = await web3.eth.getGasPrice();        // eth_gasPrice
         const ms = Math.round(performance.now() - t0);
 
         gas.textContent = (Number(gasWei)/1e9).toFixed(3) + " gwei";
@@ -273,7 +276,7 @@
     };
 
     // 送金（ローカル署名 → ブロードキャスト）
-    sendBtn.onclick = async ()=>{
+    $("send").onclick = async ()=>{
       try{
         ensureWeb3();
         if(!account) return addLog({type:"err", msg:"先にウォレットを生成/復元してください"});
