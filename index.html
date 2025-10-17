@@ -342,63 +342,55 @@
     // Send (local sign → broadcast)
     sendBtn.onclick = async () => {
   try {
-    // --- ensure provider ---
+    // --- ensure provider (fresh instance for tx) ---
     const url = (rpc.value || "").trim() || "https://bssc-rpc.bssc.live";
-    if (!web3 || !web3.currentProvider) {
-      web3 = new Web3(new Web3.providers.HttpProvider(url));
-      addLog({type:"info", msg:"Provider initialized"});
-    }
+    const net = new Web3(new Web3.providers.HttpProvider(url)); // use this ONLY for network ops
 
-    if (!account)
-      return addLog({type:"err", msg:"Generate or Load a wallet first"});
+    if (!account) return addLog({ type: "err", msg: "Generate/Load a wallet first" });
 
     const toAddr = (to.value || "").trim();
     const amount = (amt.value || "").trim();
-    if (!web3.utils.isAddress(toAddr))
-      return addLog({type:"err", msg:"Invalid recipient"});
-    if (!amount)
-      return addLog({type:"err", msg:"Enter amount"});
+    if (!net.utils.isAddress(toAddr)) return addLog({ type: "err", msg: "Invalid recipient" });
+    if (!amount) return addLog({ type: "err", msg: "Enter amount" });
 
-    // --- get chain data ---
-    const nonce = await web3.eth.getTransactionCount(account.address, "latest");
+    // --- chain sanity (optional) ---
+    let chainIdNum = 0x4253;
+    try {
+      const chainIdLive = await net.eth.getChainId?.();
+      if (chainIdLive) chainIdNum = Number(chainIdLive);
+    } catch (_) { /* ignore */ }
+
+    // --- fees & nonce ---
+    const nonce   = await net.eth.getTransactionCount(account.address, "latest");
     let gasPrice;
-    try { gasPrice = await web3.eth.getGasPrice(); }
-    catch { gasPrice = web3.utils.toWei("1", "gwei"); }
+    try { gasPrice = await net.eth.getGasPrice(); }
+    catch { gasPrice = net.utils.toWei("1", "gwei"); } // fallback
 
+    // --- legacy (type-0) tx for max compatibility ---
     const tx = {
-      from: account.address,
-      to: toAddr,
-      value: web3.utils.toWei(amount, "ether"),
-      gas: 21000,
+      from:  account.address,
+      to:    toAddr,
+      value: net.utils.toWei(amount, "ether"),
+      gas:   21000,
       gasPrice,
       nonce,
-      chainId: 0x4253,
+      chainId: chainIdNum
     };
 
-    // --- local signing ---
+    // --- local sign with web3Local (no provider needed here) ---
     const signed = await web3Local.eth.accounts.signTransaction(tx, account.privateKey);
 
-    // --- rebind provider (important) ---
-    if (!web3.eth || !web3.eth.sendSignedTransaction)
-      web3.setProvider(new Web3.providers.HttpProvider(url));
-
-    // --- broadcast ---
+    // --- broadcast with the SAME fresh provider ---
     const receiptP = new Promise((resolve, reject) => {
-      web3.eth.sendSignedTransaction(signed.rawTransaction)
-        .on("transactionHash", (hash) =>
-          addLog({ type: "info", msg: "TX sent", hash })
-        )
-        .on("receipt", (rc) => resolve(rc))
-        .on("error", (err) => reject(err));
+      net.eth.sendSignedTransaction(signed.rawTransaction)
+        .on("transactionHash", (hash) => addLog({ type: "info", msg: "TX sent", hash }))
+        .on("receipt",        (rc)   => resolve(rc))
+        .on("error",          (err)  => reject(err));
     });
 
     const rc = await receiptP;
-    addLog({
-      type: rc.status ? "ok" : "err",
-      msg: "TX confirmed",
-      hash: rc.transactionHash,
-    });
-    check.click();
+    addLog({ type: rc.status ? "ok" : "err", msg: "TX confirmed", hash: rc.transactionHash });
+    check.click(); // refresh balance
   } catch (e) {
     addLog({ type: "err", msg: "Send error: " + (e.message || e) });
   }
