@@ -1,184 +1,290 @@
 <!doctype html>
-<html lang="ja" class="h-full bg-zinc-950 text-zinc-100">
+<html lang="ja" class="h-full bg-[#0b0b10] text-zinc-100">
 <head>
   <meta charset="utf-8"/>
   <meta name="viewport" content="width=device-width,initial-scale=1"/>
-  <title>BSSC Minimal Wallet</title>
+  <title>micro-bssc-wallet (EVM, Phantom style)</title>
   <script src="https://cdn.tailwindcss.com"></script>
   <style>
-    .card{ @apply bg-zinc-900/60 backdrop-blur rounded-2xl p-5 shadow-lg ring-1 ring-white/5 }
-    .btn{ @apply rounded-xl px-4 py-2 bg-emerald-600 hover:bg-emerald-500 transition text-white font-medium}
-    .btn-muted{ @apply rounded-xl px-4 py-2 bg-zinc-800 hover:bg-zinc-700 transition text-zinc-100 font-medium}
-    .label{ @apply text-xs uppercase text-zinc-400 tracking-wider}
-    .mono{ font-variant-numeric: tabular-nums }
-    input,textarea{ @apply w-full rounded-lg bg-zinc-900/70 ring-1 ring-white/10 px-3 py-2 text-zinc-100 outline-none }
+    :root{
+      --ph-purple:#6d28d9;   /* phantom寄りの紫 */
+      --ph-indigo:#4f46e5;
+      --surface:#111217;
+      --surface-2:#0f1015;
+      --stroke:rgba(255,255,255,.06);
+    }
+    .card{ @apply rounded-2xl p-5 shadow-xl ring-1; background:linear-gradient(180deg,#0f1016, #0b0b10 70%); box-shadow:0 10px 30px rgba(0,0,0,.35); border-color:var(--stroke) }
+    .primary{
+      background-image:linear-gradient(135deg,var(--ph-purple),var(--ph-indigo));
+      @apply text-white font-semibold rounded-xl px-4 py-2 shadow ring-1 ring-white/10 transition
+             hover:brightness-110 active:scale-[.98] focus:outline-none focus-visible:ring-2 focus-visible:ring-violet-400;
+    }
+    .ghost{
+      @apply rounded-xl px-4 py-2 bg-white/5 text-zinc-100 ring-1 ring-white/10 hover:bg-white/10 transition
+             active:scale-[.98] focus:outline-none focus-visible:ring-2 focus-visible:ring-violet-400;
+    }
+    .field{ @apply w-full rounded-xl px-3 py-2 outline-none transition ring-1; background:#0f1117; color:#e5e7eb; border-color:var(--stroke) }
+    .field::placeholder{ @apply text-zinc-500 }
+    .chip{ @apply inline-flex items-center gap-2 rounded-full px-3 py-1 text-sm ring-1; background:#fff; color:#0b0b10; border-color:#e5e7eb }
+    .mono{ font-variant-numeric:tabular-nums }
+    .pill{ @apply inline-flex items-center gap-2 rounded-full px-3 py-1 text-sm }
+    .pill.ok{ background:rgba(34,197,94,.12); color:#86efac; border:1px solid rgba(34,197,94,.25)}
+    .pill.err{ background:rgba(244,63,94,.12); color:#fca5a5; border:1px solid rgba(244,63,94,.25)}
+    .pill.slow{ background:rgba(245,158,11,.12); color:#fbbf24; border:1px solid rgba(245,158,11,.25)}
+    .divider{ height:1px; background:linear-gradient(90deg,transparent,#ffffff12,transparent) }
+    /* ログ行 */
+    .log-row{ @apply grid grid-cols-[110px_minmax(0,1fr)_auto] items-center gap-3 px-3 py-2 rounded-lg ring-1; background:#0f1017; border-color:var(--stroke) }
+    .tag{ @apply text-[11px] px-2 py-0.5 rounded-full font-medium }
+    .tag.info{ background:#312e81; color:#c7d2fe }
+    .tag.ok{ background:#064e3b; color:#a7f3d0 }
+    .tag.err{ background:#7f1d1d; color:#fecaca }
+    .hover-copy{ @apply cursor-pointer hover:underline decoration-dotted }
+    /* トースト */
+    .toast{ position:fixed; right:18px; top:18px; z-index:50; display:none; }
+    .toast.show{ display:block; animation:fadein .15s ease-out }
+    @keyframes fadein{ from{opacity:0; transform:translateY(-6px)} to{opacity:1; transform:none} }
   </style>
-  <!-- web3.js (browser ESM バンドル) -->
-  <script type="module">
-    import {
-      Connection, Keypair, LAMPORTS_PER_SOL, SystemProgram, Transaction, PublicKey
-    } from "https://esm.sh/@solana/web3.js@1.95.3?bundle";
-
-    // ====== DOM ======
-    const $ = (id)=>document.getElementById(id);
-    const rpcInput = $("rpc");
-    const genBtn   = $("gen");
-    const saveBtn  = $("save");
-    const loadBtn  = $("load");
-    const pkEl     = $("pubkey");
-    const skEl     = $("secret");
-    const copyPk   = $("copyPk");
-    const balBtn   = $("balanceBtn");
-    const balEl    = $("balance");
-    const toEl     = $("to");
-    const amtEl    = $("amt");
-    const sendBtn  = $("send");
-    const logEl    = $("log");
-
-    // ====== 状態 ======
-    let connection = null;
-    let wallet = null; // Keypair
-    const LS_KEY = "bssc_wallet_secret_b58";
-
-    // ====== ユーティリティ ======
-    function log(msg){ logEl.value = `[${new Date().toLocaleTimeString()}] ${msg}\n` + logEl.value; }
-    const toLamports = (amountBNB)=> Math.round(Number(amountBNB) * LAMPORTS_PER_SOL);
-    const fmt = (n)=> new Intl.NumberFormat("en-US",{maximumFractionDigits:9}).format(n);
-
-    function b58encode(bytes){
-      // 簡易：Base58はライブラリ無しでもOKにするため、ここはBase64保存に妥協（デモ用途）
-      return btoa(String.fromCharCode(...bytes));
-    }
-    function b58decode(str){
-      const bin = atob(str); const arr=new Uint8Array(bin.length);
-      for(let i=0;i<bin.length;i++) arr[i]=bin.charCodeAt(i);
-      return arr;
-    }
-
-    // ====== 接続 / 初期化 ======
-    function ensureConnection(){
-      const rpc = rpcInput.value.trim();
-      if(!rpc) throw new Error("RPC URL を入力してください");
-      connection = new Connection(rpc, "confirmed");
-      return connection;
-    }
-
-    // ====== ウォレット生成 ======
-    genBtn.onclick = ()=>{
-      wallet = Keypair.generate();
-      pkEl.textContent = wallet.publicKey.toBase58();
-      skEl.value = b58encode(wallet.secretKey); // デモ用にbase64保存（本番は暗号化推奨）
-      log("新しいウォレットを生成しました");
-    };
-
-    // ====== 保存/読込（ローカルブラウザ） ======
-    saveBtn.onclick = ()=>{
-      if(!wallet){ log("先にウォレットを生成してください"); return; }
-      localStorage.setItem(LS_KEY, b58encode(wallet.secretKey));
-      log("ローカルに秘密鍵を保存しました（デモ）。");
-    };
-    loadBtn.onclick = ()=>{
-      const raw = localStorage.getItem(LS_KEY);
-      if(!raw){ log("保存された秘密鍵がありません"); return; }
-      const sk = b58decode(raw);
-      wallet = Keypair.fromSecretKey(sk);
-      pkEl.textContent = wallet.publicKey.toBase58();
-      skEl.value = raw;
-      log("ローカルからウォレットを復元しました。");
-    };
-    copyPk.onclick = async ()=>{
-      const addr = pkEl.textContent.trim();
-      if(!addr) return;
-      await navigator.clipboard.writeText(addr);
-      log("アドレスをコピーしました");
-    };
-
-    // ====== 残高確認 ======
-    balBtn.onclick = async ()=>{
-      try{
-        ensureConnection();
-        if(!wallet) { log("先にウォレットを生成/読込してください"); return; }
-        const lamports = await connection.getBalance(wallet.publicKey);
-        balEl.textContent = `${fmt(lamports / LAMPORTS_PER_SOL)} BNB`;
-        log(`残高: ${lamports} lamports`);
-      }catch(e){ log(`残高取得エラー: ${e.message||e}`); }
-    };
-
-    // ====== 送金 ======
-    sendBtn.onclick = async ()=>{
-      try{
-        ensureConnection();
-        if(!wallet){ log("先にウォレットを生成/読込してください"); return; }
-        const to = toEl.value.trim();
-        const amt = amtEl.value.trim();
-        if(!to || !amt){ log("送金先と金額を入力してください"); return; }
-        let toPk;
-        try { toPk = new PublicKey(to); } catch { log("送金先アドレスが不正です"); return; }
-
-        const lamports = toLamports(amt);
-        const tx = new Transaction().add(SystemProgram.transfer({
-          fromPubkey: wallet.publicKey,
-          toPubkey:   toPk,
-          lamports
-        }));
-
-        const sig = await connection.sendTransaction(tx, [wallet], {skipPreflight:false});
-        log(`送金送信: ${sig}`);
-        const conf = await connection.confirmTransaction(sig, "confirmed");
-        log(`送金完了: ${sig}  status=${conf?.value?.err ? "ERR" : "OK"}`);
-      }catch(e){ log(`送金エラー: ${e.message||e}`); }
-    };
-
-    // デフォルトRPC
-    rpcInput.value = "https://bssc-rpc.bssc.live";
-  </script>
 </head>
 <body class="h-full">
-  <main class="max-w-4xl mx-auto px-4 py-8 space-y-6">
-    <header class="flex items-center justify-between">
-      <h1 class="text-2xl font-semibold tracking-tight">BSSC Minimal Wallet</h1>
-      <div class="text-sm text-zinc-400">Send / Receive on BSSC testnet</div>
-    </header>
+<main class="max-w-5xl mx-auto px-4 py-8 space-y-6">
+  <!-- ヘッダー -->
+  <header class="flex items-center justify-between">
+    <div class="flex items-center gap-3">
+      <div class="size-9 rounded-xl ring-1 ring-white/10"
+           style="background:radial-gradient(110% 110% at top left,rgba(109,40,217,.8),rgba(79,70,229,.8)); box-shadow:0 6px 30px rgba(109,40,217,.35)"></div>
+      <h1 class="text-xl md:text-2xl font-semibold tracking-tight">micro-bssc-wallet</h1>
+      <span class="chip">EVM / BNB on BSSC</span>
+    </div>
+    <div id="status" class="pill ok hidden"><span class="size-2 rounded-full bg-emerald-400"></span><span>HEALTHY</span></div>
+  </header>
 
-    <section class="card">
-      <div class="label">RPC URL</div>
-      <div class="mt-2 flex gap-2">
-        <input id="rpc" placeholder="https://bssc-rpc.bssc.live"/>
-        <button id="balanceBtn" class="btn-muted">Check Balance</button>
+  <!-- ネットワーク / 残高 -->
+  <section class="grid md:grid-cols-3 gap-4">
+    <div class="card space-y-3 md:col-span-2">
+      <div class="text-xs uppercase text-zinc-400 tracking-wider">Network</div>
+      <div class="flex gap-2">
+        <input id="rpc" class="field" placeholder="https://bssc-rpc.bssc.live"/>
+        <button id="ping" class="ghost">Ping</button>
       </div>
-    </section>
+      <div class="divider my-2"></div>
+      <div class="grid grid-cols-3 gap-4">
+        <div>
+          <div class="text-xs uppercase text-zinc-400 tracking-wider">Balance</div>
+          <div id="bal" class="text-2xl font-semibold mono mt-1">—</div>
+        </div>
+        <div>
+          <div class="text-xs uppercase text-zinc-400 tracking-wider">Gas price</div>
+          <div id="gas" class="text-2xl font-semibold mono mt-1">—</div>
+        </div>
+        <div class="">
+          <div class="text-xs uppercase text-zinc-400 tracking-wider">Last update</div>
+          <div id="upd" class="mt-1 text-zinc-300">—</div>
+        </div>
+      </div>
+    </div>
 
-    <section class="grid grid-cols-1 md:grid-cols-2 gap-4">
-      <div class="card space-y-3">
-        <div class="label">Wallet</div>
+    <div class="card space-y-3">
+      <div class="text-xs uppercase text-zinc-400 tracking-wider">Quick Actions</div>
+      <div class="flex flex-wrap gap-2">
+        <button id="gen" class="primary">Generate</button>
+        <button id="save" class="ghost">Save (local)</button>
+        <button id="load" class="ghost">Load</button>
+        <button id="check" class="ghost">Check Balance</button>
+      </div>
+    </div>
+  </section>
+
+  <!-- ウォレット / 送金 -->
+  <section class="grid md:grid-cols-2 gap-4">
+    <div class="card space-y-3">
+      <div class="text-xs uppercase text-zinc-400 tracking-wider">Your Wallet</div>
+      <div class="flex items-center justify-between">
+        <div class="truncate mono" id="addr">—</div>
         <div class="flex gap-2">
-          <button id="gen" class="btn">Generate</button>
-          <button id="save" class="btn-muted">Save (local)</button>
-          <button id="load" class="btn-muted">Load</button>
-        </div>
-        <div class="label">Address</div>
-        <div class="mt-1 break-all mono" id="pubkey">—</div>
-        <button id="copyPk" class="btn-muted mt-2">Copy Address</button>
-        <div class="label mt-4">Secret (base64, demo)</div>
-        <textarea id="secret" rows="3" placeholder="（デモ用途：本番は暗号化保管推奨）"></textarea>
-      </div>
-
-      <div class="card space-y-3">
-        <div class="label">Balance</div>
-        <div id="balance" class="text-3xl font-semibold mono mt-1">—</div>
-        <div class="label mt-4">Send</div>
-        <input id="to" placeholder="Recipient Address (BSSC)"/>
-        <div class="flex gap-2 mt-2">
-          <input id="amt" placeholder="Amount (BNB)"/>
-          <button id="send" class="btn">Send</button>
+          <button id="copyAddr" class="ghost">Copy</button>
+          <a id="expl" class="ghost" target="_blank" rel="noreferrer">Explorer</a>
         </div>
       </div>
-    </section>
+      <div class="text-xs uppercase text-zinc-400 tracking-wider mt-2">Private Key (demo)</div>
+      <textarea id="pk" rows="3" class="field"
+        placeholder="※デモ用：本番は暗号化保存にしてください"></textarea>
+    </div>
 
-    <section class="card">
-      <div class="label">Logs</div>
-      <textarea id="log" rows="10" class="mt-2" placeholder="ここに進捗やトランザクションIDが表示されます"></textarea>
-    </section>
-  </main>
+    <div class="card space-y-3">
+      <div class="text-xs uppercase text-zinc-400 tracking-wider">Send BNB</div>
+      <input id="to" class="field" placeholder="Recipient (0x… または bsscアドレス)"/>
+      <div class="flex gap-2">
+        <input id="amt" class="field" placeholder="Amount (BNB)"/>
+        <button id="send" class="primary">Send</button>
+      </div>
+      <p class="text-sm text-zinc-500">* 送金には手数料が必要です（testnet BNB）。</p>
+    </div>
+  </section>
+
+  <!-- ログ（Phantom風） -->
+  <section class="card space-y-3">
+    <div class="flex items-center justify-between">
+      <div class="text-xs uppercase text-zinc-400 tracking-wider">Activity</div>
+      <button id="clear" class="ghost">Clear</button>
+    </div>
+    <div id="logs" class="space-y-2"></div>
+  </section>
+</main>
+
+<!-- トースト -->
+<div id="toast" class="toast">
+  <div class="rounded-xl px-3 py-2 bg-white text-black shadow-lg ring-1 ring-black/10 flex items-center gap-2">
+    <svg width="18" height="18" viewBox="0 0 24 24" fill="none"><path d="M12 9v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" stroke="#10b981" stroke-width="2" stroke-linecap="round"/></svg>
+    <span id="toastText" class="text-sm font-medium">Copied</span>
+  </div>
+</div>
+
+<!-- ethers.js + アプリ本体 -->
+<script type="module">
+  import { ethers } from "https://cdn.jsdelivr.net/npm/ethers@6.13.2/dist/ethers.min.js";
+  const $ = (id)=>document.getElementById(id);
+
+  // DOM
+  const rpc=$("rpc"), ping=$("ping"), gen=$("gen"), save=$("save"), load=$("load"), check=$("check");
+  const addr=$("addr"), pk=$("pk"), copyAddr=$("copyAddr"), expl=$("expl");
+  const bal=$("bal"), gas=$("gas"), upd=$("upd");
+  const to=$("to"), amt=$("amt"), send=$("send");
+  const status=$("status"), logs=$("logs"), clear=$("clear");
+  const toast=$("toast"), toastText=$("toastText");
+
+  // 状態
+  const LS_KEY="micro_bssc_wallet_priv";
+  let provider=null, wallet=null;
+
+  function setProvider(){
+    const url=rpc.value.trim();
+    if(!url) throw new Error("RPC URL を入力してください");
+    provider=new ethers.JsonRpcProvider(url);
+  }
+
+  function showToast(text){
+    toastText.textContent=text; toast.classList.add("show");
+    setTimeout(()=>toast.classList.remove("show"),1400);
+  }
+
+  function addLog({type="info", msg, hash}){
+    const row=document.createElement("div"); row.className="log-row";
+    const ts=document.createElement("div"); ts.className="mono text-zinc-400"; ts.textContent=new Date().toLocaleTimeString();
+    const content=document.createElement("div"); content.className="truncate";
+    const badge=document.createElement("span"); badge.className="tag "+(type==="ok"?"ok":type==="err"?"err":"info"); badge.textContent=type.toUpperCase();
+    content.appendChild(badge);
+    const span=document.createElement("span"); span.className="ml-2";
+    if(hash){
+      const a=document.createElement("a");
+      a.href = (expl.href || "https://explorer.bssc.live") + "/tx/" + hash;
+      a.target="_blank"; a.rel="noreferrer"; a.textContent=msg || hash; a.className="hover-copy";
+      content.appendChild(a);
+      const copy = document.createElement("button");
+      copy.className="ml-2 text-xs underline decoration-dotted text-zinc-300";
+      copy.textContent="Copy";
+      copy.onclick=()=>{ navigator.clipboard.writeText(hash); showToast("Tx hash copied"); };
+      content.appendChild(copy);
+    } else {
+      span.textContent = msg;
+      content.appendChild(span);
+    }
+    const act=document.createElement("div");
+    row.appendChild(ts); row.appendChild(content); row.appendChild(act);
+    logs.prepend(row);
+  }
+
+  function setStatus(state){
+    status.classList.remove("hidden");
+    status.className="pill "+(state==="ok"?"ok":state==="slow"?"slow":"err");
+    status.innerHTML = state==="ok"
+      ? '<span class="size-2 rounded-full bg-emerald-400"></span><span>HEALTHY</span>'
+      : state==="slow"
+      ? '<span class="size-2 rounded-full bg-amber-400"></span><span>SLOW</span>'
+      : '<span class="size-2 rounded-full bg-rose-400"></span><span>ERROR</span>';
+  }
+
+  // 生成/保存/復元
+  gen.onclick=()=>{
+    wallet = ethers.Wallet.createRandom();
+    addr.textContent = wallet.address;
+    pk.value = wallet.privateKey;
+    expl.href = "https://explorer.bssc.live/address/"+wallet.address;
+    addLog({type:"info", msg:"新しいウォレットを生成しました"});
+  };
+  save.onclick=()=>{
+    if(!wallet) return addLog({type:"err", msg:"先にウォレットを生成してください"});
+    localStorage.setItem(LS_KEY, wallet.privateKey);
+    addLog({type:"ok", msg:"ローカルに秘密鍵を保存しました（デモ）"});
+  };
+  load.onclick=()=>{
+    const priv=localStorage.getItem(LS_KEY);
+    if(!priv) return addLog({type:"err", msg:"保存された秘密鍵がありません"});
+    try{
+      wallet=new ethers.Wallet(priv);
+      addr.textContent=wallet.address; pk.value=priv;
+      expl.href="https://explorer.bssc.live/address/"+wallet.address;
+      addLog({type:"ok", msg:"ローカルからウォレットを復元しました"});
+    }catch(e){ addLog({type:"err", msg:"復元エラー: "+(e.message||e)}) }
+  };
+  copyAddr.onclick=async()=>{
+    const a=addr.textContent.trim(); if(!a||a==="—") return;
+    await navigator.clipboard.writeText(a); showToast("Address copied");
+  };
+
+  // Ping（ガス/レイテンシ＋最新）
+  ping.onclick=async()=>{
+    try{
+      setProvider();
+      const start=performance.now();
+      const bn=await provider.getBlockNumber();
+      const gasPrice=await provider.getGasPrice?.() ?? (await provider.send("eth_gasPrice",[]));
+      const ms=Math.round(performance.now()-start);
+      gas.textContent = ethers.formatUnits(gasPrice, "gwei")+" gwei";
+      upd.textContent = new Date().toLocaleTimeString();
+      setStatus(ms<800?"ok":ms<1500?"slow":"err");
+      addLog({type:"info", msg:`Ping OK (block ${bn}, ${ms}ms)`});
+    }catch(e){
+      setStatus("err");
+      addLog({type:"err", msg:"Ping失敗: "+(e.message||e)});
+    }
+  };
+
+  // 残高
+  check.onclick=async()=>{
+    try{
+      setProvider();
+      if(!wallet) return addLog({type:"err", msg:"先にウォレットを生成/復元してください"});
+      const wei=await provider.getBalance(wallet.address);
+      bal.textContent = ethers.formatEther(wei)+" BNB";
+      upd.textContent = new Date().toLocaleTimeString();
+      addLog({type:"info", msg:`残高 ${wei.toString()} wei`});
+    }catch(e){ addLog({type:"err", msg:"残高取得エラー: "+(e.message||e)}) }
+  };
+
+  // 送金
+  send.onclick=async()=>{
+    try{
+      setProvider();
+      if(!wallet) return addLog({type:"err", msg:"先にウォレットを生成/復元してください"});
+      const signer=wallet.connect(provider);
+      const toAddr=to.value.trim();
+      const amount=amt.value.trim();
+      if(!ethers.isAddress(toAddr)) return addLog({type:"err", msg:"送金先が不正です"});
+      if(!amount) return addLog({type:"err", msg:"金額を入力してください"});
+
+      const tx = await signer.sendTransaction({ to: toAddr, value: ethers.parseEther(amount) });
+      addLog({type:"info", msg:"送金送信", hash:tx.hash});
+      const rec=await tx.wait();
+      addLog({type: rec.status===1?"ok":"err", msg:"送金完了", hash:tx.hash});
+      check.click(); // 残高更新
+    }catch(e){ addLog({type:"err", msg:"送金エラー: "+(e.message||e)}) }
+  };
+
+  // クリア
+  clear.onclick=()=>{ logs.innerHTML=""; };
+
+  // 既定RPC
+  rpc.value="https://bssc-rpc.bssc.live";
+</script>
 </body>
 </html>
