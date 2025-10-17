@@ -182,7 +182,7 @@ const DEFAULT_RPC = location.origin + "/api/solana";
       addLog({type:"ok",msg:"TX confirmed",sig}); check.click(); }catch(e){ addLog({type:"err",msg:"Send error: "+(e.message||e)}); } };
 
     clearBtn.onclick=()=>{ logs.innerHTML=""; };
-    rpc.value=DEFAULT_RPC;
+    rpc.value = DEFAULT_RPC; // ← 末尾で設定
   </script>
 </body>
 </html>
