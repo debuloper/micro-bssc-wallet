@@ -39,6 +39,7 @@
 </head>
 <body>
   <main class="shell space-y-6">
+    <!-- Header -->
     <header class="flex items-center justify-between">
       <div class="flex items-center gap-3">
         <div class="w-9 h-9 rounded-xl ring-1 ring-white/10"
@@ -100,7 +101,7 @@
         <input id="to" class="field" placeholder="Recipient (Base58)"/>
         <div class="flex gap-2">
           <input id="amt" class="field" placeholder="Amount (BSSC)"/>
-          <button id="max" class="ghost">Max</button>
+          <button id="max"  class="ghost">Max</button>
           <button id="send" class="primary">Send</button>
         </div>
         <p class="text-sm text-zinc-500">1 BSSC = 1,000,000,000 lamports</p>
@@ -117,21 +118,27 @@
     </section>
   </main>
 
+  <!-- Solana web3.js (ESM) -->
   <script type="module">
     import {
       Connection, Keypair, PublicKey,
       SystemProgram, Transaction, LAMPORTS_PER_SOL
     } from "https://esm.sh/@solana/web3.js@1.95.3?bundle";
 
+    // -------- Config (display vs actual path) --------
+    const DISPLAY_RPC = "https://bssc-rpc.bssc.live";                 // shown in UI only
+    const DEFAULT_RPC = (location?.origin || "") + "/api/solana";     // actual RPC (proxy)
+
+    // -------- State --------
     const EXPL="https://explorer.bssc.live";
-    const DEFAULT_RPC = (location?.origin || "") + "/api/solana"; // connect via proxy
-    const DISPLAY_RPC = "https://bssc-rpc.bssc.live";
     let conn=null, wallet=null, feeHint=5000;
 
-    // Utility
+    // -------- Utils --------
     const $ = (id)=>document.getElementById(id);
     const b64e=(u8)=>btoa(String.fromCharCode(...u8));
     const b64d=(b)=>Uint8Array.from(atob(b), c=>c.charCodeAt(0));
+    const u8ToB64=(u8)=>btoa(String.fromCharCode(...u8));
+
     function addLog({type="info", msg, sig}){
       const box=$("logs"); if(!box) return;
       const row=document.createElement("div"); row.className="log-row";
@@ -141,62 +148,109 @@
       body.appendChild(tag);
       if(sig){ const a=document.createElement("a"); a.href=`${EXPL}/tx/${sig}`; a.target="_blank"; a.rel="noreferrer";
         a.textContent=" "+sig.slice(0,10)+"…"+sig.slice(-8); a.className="hover-copy"; body.appendChild(a);}
-      else{ const span=document.createElement("span"); span.className="ml-2"; span.textContent=msg; body.appendChild(span);}
+      else { const span=document.createElement("span"); span.className="ml-2"; span.textContent=msg; body.appendChild(span);}
       row.appendChild(ts); row.appendChild(body); box.prepend(row);
     }
 
     function ensureConn(){ conn=new Connection(DEFAULT_RPC,"confirmed"); return conn; }
 
-    // --- UI actions ---
+    // -------- Actions --------
     $("gen").onclick=()=>{ wallet=Keypair.generate(); $("addr").textContent=wallet.publicKey.toBase58();
       $("sec").value=b64e(wallet.secretKey); addLog({msg:"Generated new wallet"}); };
 
     $("importRaw").onclick=()=>{ const raw=prompt("Paste base64 secret key (64 bytes)"); if(!raw) return;
       try{ wallet=Keypair.fromSecretKey(b64d(raw.trim())); $("addr").textContent=wallet.publicKey.toBase58();
-        $("sec").value=raw.trim(); addLog({type:"ok",msg:"Recovered wallet"});}
-      catch(e){ addLog({type:"err",msg:"Recover failed: "+(e.message||e)});} };
+        $("sec").value=raw.trim(); addLog({type:"ok", msg:"Recovered wallet"}); }
+      catch(e){ addLog({type:"err", msg:"Recover failed: "+(e.message||e)}); } };
 
-    $("copyAddr").onclick=async()=>{ const a=$("addr").textContent.trim(); if(a&&a!=="—"){ await navigator.clipboard.writeText(a); addLog({type:"ok",msg:"Address copied"});} };
-    $("copySec").onclick=async()=>{ const s=$("sec").value.trim(); if(s){ await navigator.clipboard.writeText(s); addLog({type:"ok",msg:"Secret copied"});} };
+    $("copyAddr").onclick=async()=>{ const a=$("addr").textContent.trim(); if(a&&a!=="—"){ await navigator.clipboard.writeText(a); addLog({type:"ok", msg:"Address copied"});} };
+    $("copySec").onclick=async()=>{ const s=$("sec").value.trim(); if(s){ await navigator.clipboard.writeText(s); addLog({type:"ok", msg:"Secret copied"});} };
 
     $("ping").onclick=async()=>{ try{ ensureConn(); const t0=performance.now(); const slot=await conn.getSlot("confirmed");
       addLog({msg:`Ping OK (slot ${slot}, ${Math.round(performance.now()-t0)}ms)`}); }
-      catch(e){ addLog({type:"err",msg:"Ping failed: "+(e.message||e)});} };
+      catch(e){ addLog({type:"err", msg:"Ping failed: "+(e.message||e)});} };
 
-    $("check").onclick=async()=>{ try{ ensureConn(); if(!wallet)return addLog({type:"err",msg:"Generate first"});
+    $("check").onclick=async()=>{ try{ ensureConn(); if(!wallet)return addLog({type:"err", msg:"Generate first"});
       const lam=await conn.getBalance(wallet.publicKey,"confirmed"); $("bal").textContent=(lam/LAMPORTS_PER_SOL)+" BSSC"; addLog({msg:`Balance ${lam} lamports`}); }
-      catch(e){ addLog({type:"err",msg:"Balance error: "+(e.message||e)});} };
+      catch(e){ addLog({type:"err", msg:"Balance error: "+(e.message||e)});} };
 
-    $("max").onclick=async()=>{ try{ ensureConn(); if(!wallet)return addLog({type:"err",msg:"Generate first"});
-      const lam=await conn.getBalance(wallet.publicKey,"confirmed"); $("amt").value=(Math.max(0,lam-feeHint)/LAMPORTS_PER_SOL).toString(); addLog({msg:"Max computed"});}
-      catch(e){ addLog({type:"err",msg:"Max error: "+(e.message||e)});} };
+    $("max").onclick=async()=>{ try{ ensureConn(); if(!wallet)return addLog({type:"err", msg:"Generate first"});
+      const lam=await conn.getBalance(wallet.publicKey,"confirmed"); $("amt").value=(Math.max(0,lam-feeHint)/LAMPORTS_PER_SOL).toString(); addLog({msg:"Max computed"}); }
+      catch(e){ addLog({type:"err", msg:"Max error: "+(e.message||e)});} };
 
-    $("send").onclick=async()=>{ try{ ensureConn(); if(!wallet)return addLog({type:"err",msg:"Generate first"});
-      const toStr=$("to").value.trim(); const amt=Number($("amt").value||"0"); if(!toStr||!amt)return addLog({type:"err",msg:"Enter recipient & amount"});
-      let toPk; try{ toPk=new PublicKey(toStr);}catch{return addLog({type:"err",msg:"Recipient must be Base58"});}
-      const lam=Math.round(amt*LAMPORTS_PER_SOL);
-      const {blockhash,lastValidBlockHeight}=await conn.getLatestBlockhash("confirmed");
-      const tx=new Transaction({recentBlockhash:blockhash,feePayer:wallet.publicKey})
-        .add(SystemProgram.transfer({fromPubkey:wallet.publicKey,toPubkey:toPk,lamports:lam}));
-      tx.sign(wallet);
-      const raw=tx.serialize(); const b64=btoa(String.fromCharCode(...raw));
+    // ---- sendRawTransaction(base64) only + 1 retry on blockhash expiry ----
+    $("send").onclick = async () => {
+      try {
+        ensureConn();
+        if (!wallet) return addLog({ type: "err", msg: "Generate first" });
 
-      // sendRawTransaction
-      let sig; try{
-        const r=await fetch(DEFAULT_RPC,{method:"POST",headers:{"content-type":"application/json"},
-          body:JSON.stringify({jsonrpc:"2.0",id:Date.now(),method:"sendRawTransaction",params:[b64,{skipPreflight:false,maxRetries:3}]})});
-        const j=await r.json(); if(j.error) throw new Error(j.error.message||"sendRawTransaction failed"); sig=j.result;
-      }catch(e){
-        const r2=await fetch(DEFAULT_RPC,{method:"POST",headers:{"content-type":"application/json"},
-          body:JSON.stringify({jsonrpc:"2.0",id:Date.now(),method:"sendTransaction",params:[b64,{skipPreflight:false,maxRetries:3,encoding:"base64"}]})});
-        const j2=await r2.json(); if(j2.error) throw new Error(j2.error.message||"sendTransaction failed"); sig=j2.result;
+        const toStr = $("to").value.trim();
+        const amt   = Number($("amt").value || "0");
+        if (!toStr || !amt) return addLog({ type: "err", msg: "Enter recipient & amount" });
+
+        let toPk; try { toPk = new PublicKey(toStr); }
+        catch { return addLog({ type: "err", msg: "Recipient must be Base58 (Solana)" }); }
+
+        const lamports = Math.round(amt * LAMPORTS_PER_SOL);
+
+        const sendOnce = async () => {
+          const { blockhash, lastValidBlockHeight } = await conn.getLatestBlockhash("processed");
+
+          // quick balance check
+          const bal = await conn.getBalance(wallet.publicKey, "confirmed");
+          if (bal < lamports + 5000) {
+            const need = ((lamports + 5000 - bal) / LAMPORTS_PER_SOL).toFixed(9);
+            throw new Error(`Insufficient funds (+${need} BSSC incl. fee)`);
+          }
+
+          const tx = new Transaction({
+            recentBlockhash: blockhash,
+            feePayer: wallet.publicKey
+          }).add(SystemProgram.transfer({ fromPubkey: wallet.publicKey, toPubkey: toPk, lamports }));
+
+          tx.sign(wallet);
+          const raw = tx.serialize();
+          const b64 = u8ToB64(raw);
+
+          // sendRawTransaction only
+          const r = await fetch(DEFAULT_RPC, {
+            method: "POST",
+            headers: { "content-type": "application/json" },
+            body: JSON.stringify({
+              jsonrpc: "2.0", id: Date.now(),
+              method: "sendRawTransaction",
+              params: [b64, { skipPreflight: false, maxRetries: 3 }]
+            })
+          });
+          const j = await r.json();
+          if (j.error) throw new Error(j.error.message || "sendRawTransaction failed");
+
+          const sig = j.result;
+          addLog({ type: "info", msg: "TX sent", sig });
+
+          await conn.confirmTransaction({ signature: sig, blockhash, lastValidBlockHeight }, "confirmed");
+          addLog({ type: "ok", msg: "TX confirmed", sig });
+          $("check").click();
+        };
+
+        try {
+          await sendOnce();
+        } catch (e) {
+          const msg = String(e.message || e);
+          if (/blockhash|expired|not found/i.test(msg)) {
+            addLog({ type: "info", msg: "Blockhash expired. Retrying..." });
+            await sendOnce(); // one more try with fresh blockhash
+          } else {
+            throw e;
+          }
+        }
+
+      } catch (e) {
+        const m = (e.message || "").match(/[1-9A-Za-z]{87,}/);
+        if (m) addLog({ type: "err", msg: "Confirm error (see explorer)", sig: m[0] });
+        else   addLog({ type: "err", msg: "Send error: " + (e.message || e) });
       }
-
-      addLog({type:"info",msg:"TX sent",sig});
-      await conn.confirmTransaction({signature:sig,blockhash,lastValidBlockHeight},"confirmed");
-      addLog({type:"ok",msg:"TX confirmed",sig}); $("check").click();
-    }catch(e){ const m=(e.message||"").match(/[1-9A-Za-z]{87,}/);
-      if(m)addLog({type:"err",msg:"Confirm error",sig:m[0]}); else addLog({type:"err",msg:"Send error: "+(e.message||e)});} };
+    };
 
     $("clear").onclick=()=>{$("logs").innerHTML="";};
   </script>
