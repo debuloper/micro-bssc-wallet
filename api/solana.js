@@ -17,10 +17,8 @@ export default async function handler(req, res) {
     res.setHeader("content-type", "application/json");
     res.status(r.status).send(text);
   } catch (e) {
-    res.status(500).json({
-      jsonrpc: "2.0",
-      error: { code: -32000, message: String(e) },
-      id: null
-    });
+    res
+      .status(500)
+      .json({ jsonrpc: "2.0", error: { code: -32000, message: String(e) }, id: null });
   }
 }
