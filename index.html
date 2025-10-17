@@ -8,9 +8,8 @@
   <style>
     :root{ --ph-purple:#6d28d9; --ph-indigo:#4f46e5; --stroke:rgba(255,255,255,.06); }
     .shell{ max-width:1100px; margin:0 auto; padding:32px 16px }
-    .card{ background:linear-gradient(180deg,#10111a,#0b0b10 65%);
-           border-radius:16px; padding:20px; box-shadow:0 12px 32px rgba(0,0,0,.4);
-           border:1px solid var(--stroke) }
+    .card{ background:linear-gradient(180deg,#10111a,#0b0b10 65%); border-radius:16px; padding:20px;
+           box-shadow:0 12px 32px rgba(0,0,0,.4); border:1px solid var(--stroke) }
     .primary{ background-image:linear-gradient(135deg,var(--ph-purple),var(--ph-indigo));
               color:#fff; border-radius:12px; padding:10px 16px; font-weight:700;
               box-shadow:0 8px 24px rgba(109,40,217,.35); border:1px solid rgba(255,255,255,.1);
@@ -22,6 +21,7 @@
     .ghost:hover{ background:#ffffff1c } .ghost:active{ transform:scale(.98) }
     .field{ width:100%; background:#0f1117; color:#e5e7eb; border:1px solid var(--stroke);
             border-radius:12px; padding:10px 12px; outline:none }
+    .field::placeholder{ color:#9ca3af }
     .mono{ font-variant-numeric:tabular-nums }
     .divider{ height:1px; background:linear-gradient(90deg,transparent,#ffffff12,transparent); margin:10px 0 }
     .pill{ display:inline-flex; align-items:center; gap:8px; border-radius:9999px; padding:6px 12px; font-weight:600 }
@@ -34,7 +34,6 @@
     .tag{ font-size:11px; padding:2px 8px; border-radius:9999px; font-weight:700 }
     .tag.info{ background:#2a2e6b; color:#c7d2fe } .tag.ok{ background:#0a3c2f; color:#a7f3d0 }
     .tag.err{ background:#5f1b1b; color:#fecaca } .hover-copy{ cursor:pointer; text-decoration:underline; text-decoration-style:dotted }
-    #logs{ min-height:120px; }
   </style>
 </head>
 <body>
@@ -52,16 +51,14 @@
       </div>
     </header>
 
-    <!-- Network -->
+    <!-- Network / Quick -->
     <section class="grid md:grid-cols-3 gap-4">
       <div class="card md:col-span-2">
         <div class="text-xs uppercase text-zinc-400 mb-2">Network</div>
-        <div class="flex items-center justify-between flex-wrap gap-2">
-          <div class="text-base text-zinc-100 font-mono">https://bssc-rpc.bssc.live</div>
-          <div class="flex gap-2">
-            <button id="ping" class="ghost">Ping</button>
-            <a class="ghost" target="_blank" rel="noreferrer" href="https://bssc.live/#faucet">Get Test BSSC</a>
-          </div>
+        <div class="flex flex-wrap gap-2">
+          <input id="rpc" class="field" placeholder="/api/solana"/>
+          <button id="ping" class="ghost">Ping</button>
+          <a class="ghost" target="_blank" rel="noreferrer" href="https://bssc.live/#faucet">Get Test BSSC</a>
         </div>
         <div class="divider"></div>
         <div class="grid grid-cols-3 gap-4">
@@ -74,8 +71,10 @@
       <div class="card space-y-3">
         <div class="text-xs uppercase text-zinc-400">Quick Actions</div>
         <div class="flex flex-wrap gap-2">
-          <button id="gen" class="primary">Generate Wallet</button>
-          <button id="importRaw" class="ghost">Recover Wallet</button>
+          <button id="gen" class="primary">Generate</button>
+          <button id="save" class="ghost">Save (local)</button>
+          <button id="load" class="ghost">Load</button>
+          <button id="importRaw" class="ghost">Import (base64)</button>
           <button id="check" class="ghost">Check Balance</button>
         </div>
       </div>
@@ -87,13 +86,13 @@
         <div class="text-xs uppercase text-zinc-400">Your Wallet</div>
         <div class="flex items-center justify-between">
           <div id="addr" class="truncate mono">—</div>
-          <div class="flex gap-2"><button id="copyAddr" class="ghost">Copy</button></div>
+          <div class="flex gap-2">
+            <button id="copyAddr" class="ghost">Copy</button>
+            <a id="expl" class="ghost" target="_blank" rel="noreferrer">Explorer</a>
+          </div>
         </div>
         <div class="text-xs uppercase text-zinc-400 mt-2">Secret (base64)</div>
-        <div class="flex gap-2">
-          <textarea id="sec" rows="3" class="field flex-1" placeholder="Demo only: 64-byte base64 secret key"></textarea>
-          <button id="copySec" class="ghost">Copy</button>
-        </div>
+        <textarea id="sec" rows="3" class="field" placeholder="Demo only: 64-byte base64 secret key"></textarea>
       </div>
 
       <div class="card space-y-3">
@@ -101,7 +100,7 @@
         <input id="to" class="field" placeholder="Recipient (Base58)"/>
         <div class="flex gap-2">
           <input id="amt" class="field" placeholder="Amount (BSSC)"/>
-          <button id="max"  class="ghost">Max</button>
+          <button id="max" class="ghost">Max</button>
           <button id="send" class="primary">Send</button>
         </div>
         <p class="text-sm text-zinc-500">1 BSSC = 1,000,000,000 lamports</p>
@@ -122,137 +121,161 @@
   <script type="module">
     import {
       Connection, Keypair, PublicKey,
-      SystemProgram, Transaction, LAMPORTS_PER_SOL
+      SystemProgram, Transaction, sendAndConfirmTransaction, LAMPORTS_PER_SOL
     } from "https://esm.sh/@solana/web3.js@1.95.3?bundle";
 
-    // -------- Config (display vs actual path) --------
-    const DISPLAY_RPC = "https://bssc-rpc.bssc.live";                 // shown in UI only
-    const DEFAULT_RPC = (location?.origin || "") + "/api/solana";     // actual RPC (proxy)
-
-    // -------- State --------
-    const EXPL="https://explorer.bssc.live";
-    let conn=null, wallet=null, feeHint=5000;
-
-    // -------- Utils --------
+    // ------- DOM refs -------
     const $ = (id)=>document.getElementById(id);
-    const b64e=(u8)=>btoa(String.fromCharCode(...u8));
-    const b64d=(b)=>Uint8Array.from(atob(b), c=>c.charCodeAt(0));
-    const u8ToB64=(u8)=>btoa(String.fromCharCode(...u8));
+    const rpc=$("rpc"), ping=$("ping"), check=$("check");
+    const gen=$("gen"), save=$("save"), load=$("load"), importRaw=$("importRaw");
+    const addr=$("addr"), sec=$("sec"), copyAddr=$("copyAddr"), expl=$("expl");
+    const balEl=$("bal"), feeEl=$("fee"), upd=$("upd");
+    const toEl=$("to"), amtEl=$("amt"), maxBtn=$("max"), sendBtn=$("send");
+    const logs=$("logs"), clearBtn=$("clear"), status=$("status");
 
+    // ------- State -------
+    const LS_KEY="micro_bssc_solana_secret_b64";
+    const EXPL="https://explorer.bssc.live";
+    const DEFAULT_RPC=location.origin + "/api/solana";  // server-side proxy
+    let conn=null, wallet=null, lastFee=5000;
+
+    // ------- Utils -------
+    const b64e = (u8)=>btoa(String.fromCharCode(...u8));
+    const b64d = (b)=>Uint8Array.from(atob(b), c=>c.charCodeAt(0));
     function addLog({type="info", msg, sig}){
-      const box=$("logs"); if(!box) return;
       const row=document.createElement("div"); row.className="log-row";
       const ts=document.createElement("div"); ts.className="mono text-zinc-400"; ts.textContent=new Date().toLocaleTimeString();
       const body=document.createElement("div"); body.className="truncate";
       const tag=document.createElement("span"); tag.className=`tag ${type==="ok"?"ok":type==="err"?"err":"info"}`; tag.textContent=type.toUpperCase();
       body.appendChild(tag);
+      const span=document.createElement("span"); span.className="ml-2";
       if(sig){ const a=document.createElement("a"); a.href=`${EXPL}/tx/${sig}`; a.target="_blank"; a.rel="noreferrer";
-        a.textContent=" "+sig.slice(0,10)+"…"+sig.slice(-8); a.className="hover-copy"; body.appendChild(a);}
-      else { const span=document.createElement("span"); span.className="ml-2"; span.textContent=msg; body.appendChild(span);}
-      row.appendChild(ts); row.appendChild(body); box.prepend(row);
+        a.textContent=sig.slice(0,10)+"…"+sig.slice(-8); a.className="hover-copy"; body.appendChild(a); }
+      else{ span.textContent=msg; body.appendChild(span); }
+      row.appendChild(ts); row.appendChild(body); logs.prepend(row);
     }
+    function ensureConn(){ const url=(rpc.value||"").trim() || DEFAULT_RPC; conn=new Connection(url,"confirmed"); return conn; }
 
-    function ensureConn(){ conn=new Connection(DEFAULT_RPC,"confirmed"); return conn; }
+    // ------- Actions -------
+    gen.addEventListener("click", ()=>{
+      wallet = Keypair.generate();
+      addr.textContent = wallet.publicKey.toBase58();
+      sec.value = b64e(wallet.secretKey);                     // demo only
+      expl.href = `${EXPL}/address/${wallet.publicKey.toBase58()}`;
+      addLog({msg:"Generated new wallet"});
+    });
 
-    // -------- Actions --------
-    $("gen").onclick=()=>{ wallet=Keypair.generate(); $("addr").textContent=wallet.publicKey.toBase58();
-      $("sec").value=b64e(wallet.secretKey); addLog({msg:"Generated new wallet"}); };
+    save.addEventListener("click", ()=>{
+      if(!wallet) return addLog({type:"err", msg:"Generate first"});
+      localStorage.setItem(LS_KEY, b64e(wallet.secretKey));
+      addLog({type:"ok", msg:"Saved (localStorage, demo)"});
+    });
 
-    $("importRaw").onclick=()=>{ const raw=prompt("Paste base64 secret key (64 bytes)"); if(!raw) return;
-      try{ wallet=Keypair.fromSecretKey(b64d(raw.trim())); $("addr").textContent=wallet.publicKey.toBase58();
-        $("sec").value=raw.trim(); addLog({type:"ok", msg:"Recovered wallet"}); }
-      catch(e){ addLog({type:"err", msg:"Recover failed: "+(e.message||e)}); } };
+    load.addEventListener("click", ()=>{
+      const raw = localStorage.getItem(LS_KEY);
+      if(!raw) return addLog({type:"err", msg:"No saved secret"});
+      try{
+        wallet = Keypair.fromSecretKey(b64d(raw));
+        addr.textContent = wallet.publicKey.toBase58();
+        sec.value = raw;
+        expl.href = `${EXPL}/address/${wallet.publicKey.toBase58()}`;
+        addLog({type:"ok", msg:"Loaded from localStorage"});
+      }catch(e){ addLog({type:"err", msg:"Load error: "+(e.message||e)}); }
+    });
 
-    $("copyAddr").onclick=async()=>{ const a=$("addr").textContent.trim(); if(a&&a!=="—"){ await navigator.clipboard.writeText(a); addLog({type:"ok", msg:"Address copied"});} };
-    $("copySec").onclick=async()=>{ const s=$("sec").value.trim(); if(s){ await navigator.clipboard.writeText(s); addLog({type:"ok", msg:"Secret copied"});} };
+    importRaw.addEventListener("click", ()=>{
+      const raw = prompt("Paste base64 secret key (64 bytes)"); if(!raw) return;
+      try{
+        wallet = Keypair.fromSecretKey(b64d(raw.trim()));
+        addr.textContent = wallet.publicKey.toBase58();
+        sec.value = raw.trim();
+        expl.href = `${EXPL}/address/${wallet.publicKey.toBase58()}`;
+        addLog({type:"ok", msg:"Imported base64 secret"});
+      }catch(e){ addLog({type:"err", msg:"Import failed: "+(e.message||e)}); }
+    });
 
-    $("ping").onclick=async()=>{ try{ ensureConn(); const t0=performance.now(); const slot=await conn.getSlot("confirmed");
-      addLog({msg:`Ping OK (slot ${slot}, ${Math.round(performance.now()-t0)}ms)`}); }
-      catch(e){ addLog({type:"err", msg:"Ping failed: "+(e.message||e)});} };
+    copyAddr.addEventListener("click", async ()=>{
+      const a = addr.textContent.trim(); if(!a || a==="—") return;
+      await navigator.clipboard.writeText(a);
+      addLog({type:"ok", msg:"Address copied"});
+    });
 
-    $("check").onclick=async()=>{ try{ ensureConn(); if(!wallet)return addLog({type:"err", msg:"Generate first"});
-      const lam=await conn.getBalance(wallet.publicKey,"confirmed"); $("bal").textContent=(lam/LAMPORTS_PER_SOL)+" BSSC"; addLog({msg:`Balance ${lam} lamports`}); }
-      catch(e){ addLog({type:"err", msg:"Balance error: "+(e.message||e)});} };
-
-    $("max").onclick=async()=>{ try{ ensureConn(); if(!wallet)return addLog({type:"err", msg:"Generate first"});
-      const lam=await conn.getBalance(wallet.publicKey,"confirmed"); $("amt").value=(Math.max(0,lam-feeHint)/LAMPORTS_PER_SOL).toString(); addLog({msg:"Max computed"}); }
-      catch(e){ addLog({type:"err", msg:"Max error: "+(e.message||e)});} };
-
-    // ---- sendRawTransaction(base64) only + 1 retry on blockhash expiry ----
-    $("send").onclick = async () => {
-      try {
+    ping.addEventListener("click", async ()=>{
+      try{
         ensureConn();
-        if (!wallet) return addLog({ type: "err", msg: "Generate first" });
+        const t0=performance.now();
+        const slot = await conn.getSlot("confirmed");
+        const ms = Math.round(performance.now()-t0);
+        feeEl.textContent = lastFee.toLocaleString();
+        upd.textContent = new Date().toLocaleTimeString();
+        status.style.display="inline-flex"; status.className="pill ok";
+        addLog({msg:`Ping OK (slot ${slot}, ${ms}ms)`});
+      }catch(e){ status.style.display="inline-flex"; status.className="pill err";
+        addLog({type:"err", msg:"Ping failed: "+(e.message||e)}); }
+    });
 
-        const toStr = $("to").value.trim();
-        const amt   = Number($("amt").value || "0");
-        if (!toStr || !amt) return addLog({ type: "err", msg: "Enter recipient & amount" });
+    check.addEventListener("click", async ()=>{
+      try{
+        ensureConn();
+        if(!wallet) return addLog({type:"err", msg:"Generate first"});
+        const lamports = await conn.getBalance(wallet.publicKey,"confirmed");
+        balEl.textContent = (lamports / LAMPORTS_PER_SOL) + " BSSC";
+        upd.textContent = new Date().toLocaleTimeString();
+        addLog({msg:`Balance ${lamports} lamports`});
+      }catch(e){ addLog({type:"err", msg:"Balance error: "+(e.message||e)}); }
+    });
 
-        let toPk; try { toPk = new PublicKey(toStr); }
-        catch { return addLog({ type: "err", msg: "Recipient must be Base58 (Solana)" }); }
+    maxBtn.addEventListener("click", async ()=>{
+      try{
+        ensureConn(); if(!wallet) return addLog({type:"err", msg:"Generate first"});
+        const lamports = await conn.getBalance(wallet.publicKey,"confirmed");
+        const sendable = Math.max(0, lamports - lastFee); // approx fee
+        amtEl.value = (sendable / LAMPORTS_PER_SOL).toString();
+        addLog({msg:`Max computed (fee ≈ ${lastFee} lamports)`});
+      }catch(e){ addLog({type:"err", msg:"Max error: "+(e.message||e)}); }
+    });
 
-        const lamports = Math.round(amt * LAMPORTS_PER_SOL);
+    // ====== ここだけ変更：TX sent → confirm をActivityに必ず出す（Solanaのまま） ======
+    sendBtn.addEventListener("click", async ()=>{
+      try{
+        ensureConn();
+        if(!wallet) return addLog({type:"err", msg:"Generate first"});
+        const to = (toEl.value||"").trim();
+        const amount = (amtEl.value||"0").trim();
+        if(!to || !amount) return addLog({type:"err", msg:"Enter recipient & amount"});
 
-        const sendOnce = async () => {
-          const { blockhash, lastValidBlockHeight } = await conn.getLatestBlockhash("processed");
+        let toPk;
+        try { toPk = new PublicKey(to); }
+        catch { return addLog({type:"err", msg:"Recipient must be Base58 (Solana)"}); }
 
-          // quick balance check
-          const bal = await conn.getBalance(wallet.publicKey, "confirmed");
-          if (bal < lamports + 5000) {
-            const need = ((lamports + 5000 - bal) / LAMPORTS_PER_SOL).toFixed(9);
-            throw new Error(`Insufficient funds (+${need} BSSC incl. fee)`);
-          }
+        const lamports = Math.round(Number(amount) * LAMPORTS_PER_SOL);
 
-          const tx = new Transaction({
-            recentBlockhash: blockhash,
-            feePayer: wallet.publicKey
-          }).add(SystemProgram.transfer({ fromPubkey: wallet.publicKey, toPubkey: toPk, lamports }));
+        // Build & sign
+        const { blockhash } = await conn.getLatestBlockhash("processed");
+        const tx = new Transaction({
+          recentBlockhash: blockhash,
+          feePayer: wallet.publicKey
+        }).add(
+          SystemProgram.transfer({ fromPubkey: wallet.publicKey, toPubkey: toPk, lamports })
+        );
 
-          tx.sign(wallet);
-          const raw = tx.serialize();
-          const b64 = u8ToB64(raw);
+        // まず sendTransaction で signature を取得（→ TX sent）
+        const sig = await conn.sendTransaction(tx, [wallet], { skipPreflight: false });
+        addLog({ type: "info", msg: "TX sent", sig });
 
-          // sendRawTransaction only
-          const r = await fetch(DEFAULT_RPC, {
-            method: "POST",
-            headers: { "content-type": "application/json" },
-            body: JSON.stringify({
-              jsonrpc: "2.0", id: Date.now(),
-              method: "sendRawTransaction",
-              params: [b64, { skipPreflight: false, maxRetries: 3 }]
-            })
-          });
-          const j = await r.json();
-          if (j.error) throw new Error(j.error.message || "sendRawTransaction failed");
-
-          const sig = j.result;
-          addLog({ type: "info", msg: "TX sent", sig });
-
-          await conn.confirmTransaction({ signature: sig, blockhash, lastValidBlockHeight }, "confirmed");
-          addLog({ type: "ok", msg: "TX confirmed", sig });
-          $("check").click();
-        };
-
-        try {
-          await sendOnce();
-        } catch (e) {
-          const msg = String(e.message || e);
-          if (/blockhash|expired|not found/i.test(msg)) {
-            addLog({ type: "info", msg: "Blockhash expired. Retrying..." });
-            await sendOnce(); // one more try with fresh blockhash
-          } else {
-            throw e;
-          }
-        }
-
-      } catch (e) {
-        const m = (e.message || "").match(/[1-9A-Za-z]{87,}/);
-        if (m) addLog({ type: "err", msg: "Confirm error (see explorer)", sig: m[0] });
-        else   addLog({ type: "err", msg: "Send error: " + (e.message || e) });
+        // その後 confirm（成功したら TX confirmed）
+        await conn.confirmTransaction(sig, "confirmed");
+        addLog({ type: "ok", msg: "TX confirmed", sig });
+        check.click();
+      }catch(e){
+        addLog({type:"err", msg:"Send error: "+(e.message||e)});
       }
-    };
+    });
 
-    $("clear").onclick=()=>{$("logs").innerHTML="";};
+    clearBtn.addEventListener("click", ()=>{ logs.innerHTML=""; });
+
+    // default RPC for proxy
+    rpc.value = DEFAULT_RPC;
   </script>
 </body>
 </html>
