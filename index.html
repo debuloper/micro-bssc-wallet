@@ -8,32 +8,29 @@
   <style>
     :root{ --ph-purple:#6d28d9; --ph-indigo:#4f46e5; --stroke:rgba(255,255,255,.06); }
     .shell{ max-width:1100px; margin:0 auto; padding:32px 16px }
-    .card{ background:linear-gradient(180deg,#10111a,#0b0b10 65%);
-           border-radius:16px; padding:20px; box-shadow:0 12px 32px rgba(0,0,0,.4);
-           border:1px solid var(--stroke) }
+    .card{ background:linear-gradient(180deg,#10111a,#0b0b10 65%); border-radius:16px; padding:20px;
+           box-shadow:0 12px 32px rgba(0,0,0,.4); border:1px solid var(--stroke) }
     .primary{ background-image:linear-gradient(135deg,var(--ph-purple),var(--ph-indigo));
               color:#fff; border-radius:12px; padding:10px 16px; font-weight:700;
-              box-shadow:0 8px 24px rgba(109,40,217,.35);
-              border:1px solid rgba(255,255,255,.1); transition:.12s ease }
+              box-shadow:0 8px 24px rgba(109,40,217,.35); border:1px solid rgba(255,255,255,.1);
+              transition:.12s ease }
     .primary:hover{ filter:brightness(1.12); transform:translateY(-1px) }
     .primary:active{ transform:translateY(0) scale(.98) }
     .ghost{ background:#ffffff0f; color:#e5e7eb; border-radius:12px; padding:10px 16px;
             border:1px solid rgba(255,255,255,.1); transition:.12s ease }
     .ghost:hover{ background:#ffffff1c } .ghost:active{ transform:scale(.98) }
-    .field{ width:100%; background:#0f1117; color:#e5e7eb;
-            border:1px solid var(--stroke); border-radius:12px; padding:10px 12px; outline:none }
+    .field{ width:100%; background:#0f1117; color:#e5e7eb; border:1px solid var(--stroke);
+            border-radius:12px; padding:10px 12px; outline:none }
     .field::placeholder{ color:#9ca3af }
     .mono{ font-variant-numeric:tabular-nums }
     .divider{ height:1px; background:linear-gradient(90deg,transparent,#ffffff12,transparent); margin:10px 0 }
-    .pill{ display:inline-flex; align-items:center; gap:8px; border-radius:9999px;
-           padding:6px 12px; font-weight:600 }
-    .pill.ok{ background:rgba(34,197,94,.12); color:#86efac; border:1px solid rgba(34,197,94,.28) }
+    .pill{ display:inline-flex; align-items:center; gap:8px; border-radius:9999px; padding:6px 12px; font-weight:600 }
+    .pill.ok{  background:rgba(34,197,94,.12); color:#86efac; border:1px solid rgba(34,197,94,.28) }
     .pill.err{ background:rgba(244,63,94,.12); color:#fca5a5; border:1px solid rgba(244,63,94,.28) }
-    .chip{ display:inline-flex; align-items:center; gap:8px; padding:6px 10px;
-           border-radius:9999px; background:#fff; color:#0b0b10; border:1px solid #e5e7eb; font-weight:600 }
-    .log-row{ display:grid; grid-template-columns:110px minmax(0,1fr) auto;
-              align-items:center; gap:12px; padding:10px 12px; border-radius:12px;
-              background:#10111a; border:1px solid var(--stroke) }
+    .chip{ display:inline-flex; align-items:center; gap:8px; padding:6px 10px; border-radius:9999px;
+           background:#fff; color:#0b0b10; border:1px solid #e5e7eb; font-weight:600 }
+    .log-row{ display:grid; grid-template-columns:110px minmax(0,1fr) auto; align-items:center; gap:12px;
+              padding:10px 12px; border-radius:12px; background:#10111a; border:1px solid var(--stroke) }
     .tag{ font-size:11px; padding:2px 8px; border-radius:9999px; font-weight:700 }
     .tag.info{ background:#2a2e6b; color:#c7d2fe } .tag.ok{ background:#0a3c2f; color:#a7f3d0 }
     .tag.err{ background:#5f1b1b; color:#fecaca } .hover-copy{ cursor:pointer; text-decoration:underline; text-decoration-style:dotted }
@@ -41,6 +38,7 @@
 </head>
 <body>
   <main class="shell space-y-6">
+    <!-- Header -->
     <header class="flex items-center justify-between">
       <div class="flex items-center gap-3">
         <div class="w-9 h-9 rounded-xl ring-1 ring-white/10"
@@ -53,11 +51,12 @@
       </div>
     </header>
 
+    <!-- Network / Quick -->
     <section class="grid md:grid-cols-3 gap-4">
       <div class="card md:col-span-2">
         <div class="text-xs uppercase text-zinc-400 mb-2">Network</div>
         <div class="flex flex-wrap gap-2">
-          <input id="rpc" class="field" placeholder="https://bssc-rpc.bssc.live"/>
+          <input id="rpc" class="field" placeholder="/api/solana"/>
           <button id="ping" class="ghost">Ping</button>
           <a class="ghost" target="_blank" rel="noreferrer" href="https://bssc.live/#faucet">Get Test BSSC</a>
         </div>
@@ -81,6 +80,7 @@
       </div>
     </section>
 
+    <!-- Wallet / Send -->
     <section class="grid md:grid-cols-2 gap-4">
       <div class="card space-y-3">
         <div class="text-xs uppercase text-zinc-400">Your Wallet</div>
@@ -107,6 +107,7 @@
       </div>
     </section>
 
+    <!-- Activity -->
     <section class="card space-y-3">
       <div class="flex items-center justify-between">
         <div class="text-xs uppercase text-zinc-400">Activity</div>
@@ -116,9 +117,14 @@
     </section>
   </main>
 
+  <!-- Solana web3.js (ESM) -->
   <script type="module">
-    import { Connection, Keypair, PublicKey, SystemProgram, Transaction, sendAndConfirmTransaction, LAMPORTS_PER_SOL } from "https://esm.sh/@solana/web3.js@1.95.3?bundle";
+    import {
+      Connection, Keypair, PublicKey,
+      SystemProgram, Transaction, sendAndConfirmTransaction, LAMPORTS_PER_SOL
+    } from "https://esm.sh/@solana/web3.js@1.95.3?bundle";
 
+    // ------- DOM refs -------
     const $ = (id)=>document.getElementById(id);
     const rpc=$("rpc"), ping=$("ping"), check=$("check");
     const gen=$("gen"), save=$("save"), load=$("load"), importRaw=$("importRaw");
@@ -127,62 +133,131 @@
     const toEl=$("to"), amtEl=$("amt"), maxBtn=$("max"), sendBtn=$("send");
     const logs=$("logs"), clearBtn=$("clear"), status=$("status");
 
+    // ------- State -------
     const LS_KEY="micro_bssc_solana_secret_b64";
-    const EXPL = "https://explorer.bssc.live";
-// 変更前: const DEFAULT_RPC="https://bssc-rpc.bssc.live";
-const DEFAULT_RPC = location.origin + "/api/solana";
-    function ensureConn(){
-  const url = (rpc.value || "").trim() || DEFAULT_RPC;
-  return (conn = new Connection(url, "confirmed"));
-}
-    const DEFAULT_RPC="https://bssc-rpc.bssc.live";
+    const EXPL="https://explorer.bssc.live";
+    const DEFAULT_RPC=location.origin + "/api/solana";  // server-side proxy
     let conn=null, wallet=null, lastFee=5000;
 
-    const b64e=(u8)=>btoa(String.fromCharCode(...u8));
-    const b64d=(b)=>Uint8Array.from(atob(b),c=>c.charCodeAt(0));
-
-    function addLog({type="info",msg,sig}){
+    // ------- Utils -------
+    const b64e = (u8)=>btoa(String.fromCharCode(...u8));
+    const b64d = (b)=>Uint8Array.from(atob(b), c=>c.charCodeAt(0));
+    function addLog({type="info", msg, sig}){
       const row=document.createElement("div"); row.className="log-row";
       const ts=document.createElement("div"); ts.className="mono text-zinc-400"; ts.textContent=new Date().toLocaleTimeString();
       const body=document.createElement("div"); body.className="truncate";
       const tag=document.createElement("span"); tag.className=`tag ${type==="ok"?"ok":type==="err"?"err":"info"}`; tag.textContent=type.toUpperCase();
-      body.appendChild(tag); const span=document.createElement("span"); span.className="ml-2";
-      if(sig){ const a=document.createElement("a"); a.href=`${EXPL}/tx/${sig}`; a.target="_blank"; a.textContent=sig.slice(0,10)+"…"+sig.slice(-8); a.className="hover-copy"; body.appendChild(a);}
-      else{ span.textContent=msg; body.appendChild(span);}
+      body.appendChild(tag);
+      const span=document.createElement("span"); span.className="ml-2";
+      if(sig){ const a=document.createElement("a"); a.href=`${EXPL}/tx/${sig}`; a.target="_blank"; a.rel="noreferrer";
+        a.textContent=sig.slice(0,10)+"…"+sig.slice(-8); a.className="hover-copy"; body.appendChild(a); }
+      else{ span.textContent=msg; body.appendChild(span); }
       row.appendChild(ts); row.appendChild(body); logs.prepend(row);
     }
-    function ensureConn(){ const url=(rpc.value||"").trim()||DEFAULT_RPC; conn=new Connection(url,"confirmed"); return conn; }
+    function ensureConn(){ const url=(rpc.value||"").trim() || DEFAULT_RPC; conn=new Connection(url,"confirmed"); return conn; }
 
-    gen.onclick=()=>{ wallet=Keypair.generate(); addr.textContent=wallet.publicKey.toBase58(); sec.value=b64e(wallet.secretKey);
-      expl.href=`${EXPL}/address/${wallet.publicKey.toBase58()}`; addLog({msg:"Generated new wallet"}); };
-    save.onclick=()=>{ if(!wallet)return addLog({type:"err",msg:"Generate first"}); localStorage.setItem(LS_KEY,b64e(wallet.secretKey)); addLog({type:"ok",msg:"Saved locally"}); };
-    load.onclick=()=>{ const raw=localStorage.getItem(LS_KEY); if(!raw)return addLog({type:"err",msg:"No saved secret"}); wallet=Keypair.fromSecretKey(b64d(raw));
-      addr.textContent=wallet.publicKey.toBase58(); sec.value=raw; expl.href=`${EXPL}/address/${wallet.publicKey.toBase58()}`; addLog({type:"ok",msg:"Loaded from localStorage"}); };
-    importRaw.onclick=()=>{ const raw=prompt("Paste base64 secret key"); if(!raw)return; wallet=Keypair.fromSecretKey(b64d(raw.trim()));
-      addr.textContent=wallet.publicKey.toBase58(); sec.value=raw.trim(); expl.href=`${EXPL}/address/${wallet.publicKey.toBase58()}`; addLog({type:"ok",msg:"Imported secret"}); };
-    copyAddr.onclick=async()=>{ const a=addr.textContent.trim(); if(!a||a==="—")return; await navigator.clipboard.writeText(a); addLog({type:"ok",msg:"Address copied"}); };
+    // ------- Actions -------
+    gen.addEventListener("click", ()=>{
+      wallet = Keypair.generate();
+      addr.textContent = wallet.publicKey.toBase58();
+      sec.value = b64e(wallet.secretKey);                     // demo only
+      expl.href = `${EXPL}/address/${wallet.publicKey.toBase58()}`;
+      addLog({msg:"Generated new wallet"});
+    });
 
-    ping.onclick=async()=>{ try{ ensureConn(); const t0=performance.now(); const v=await conn.getVersion(); const slot=await conn.getSlot();
-      const ms=Math.round(performance.now()-t0); feeEl.textContent=lastFee.toLocaleString(); upd.textContent=new Date().toLocaleTimeString();
-      status.style.display="inline-flex"; status.className="pill ok"; addLog({msg:`Ping OK (slot ${slot}, ${ms}ms)`}); }
-      catch(e){ status.className="pill err"; addLog({type:"err",msg:"Ping failed: "+(e.message||e)}); } };
+    save.addEventListener("click", ()=>{
+      if(!wallet) return addLog({type:"err", msg:"Generate first"});
+      localStorage.setItem(LS_KEY, b64e(wallet.secretKey));
+      addLog({type:"ok", msg:"Saved (localStorage, demo)"});
+    });
 
-    check.onclick=async()=>{ try{ ensureConn(); if(!wallet)return addLog({type:"err",msg:"Generate first"});
-      const bal=await conn.getBalance(wallet.publicKey); balEl.textContent=(bal/LAMPORTS_PER_SOL)+" BSSC"; upd.textContent=new Date().toLocaleTimeString();
-      addLog({msg:`Balance ${bal} lamports`}); }catch(e){ addLog({type:"err",msg:"Balance error: "+(e.message||e)}); } };
+    load.addEventListener("click", ()=>{
+      const raw = localStorage.getItem(LS_KEY);
+      if(!raw) return addLog({type:"err", msg:"No saved secret"});
+      try{
+        wallet = Keypair.fromSecretKey(b64d(raw));
+        addr.textContent = wallet.publicKey.toBase58();
+        sec.value = raw;
+        expl.href = `${EXPL}/address/${wallet.publicKey.toBase58()}`;
+        addLog({type:"ok", msg:"Loaded from localStorage"});
+      }catch(e){ addLog({type:"err", msg:"Load error: "+(e.message||e)}); }
+    });
 
-    maxBtn.onclick=async()=>{ try{ ensureConn(); const bal=await conn.getBalance(wallet.publicKey);
-      const sendable=Math.max(0,bal-lastFee); amtEl.value=(sendable/LAMPORTS_PER_SOL).toString(); addLog({msg:`Max computed (${lastFee} fee)`}); }
-      catch(e){ addLog({type:"err",msg:"Max error: "+(e.message||e)}); } };
+    importRaw.addEventListener("click", ()=>{
+      const raw = prompt("Paste base64 secret key (64 bytes)"); if(!raw) return;
+      try{
+        wallet = Keypair.fromSecretKey(b64d(raw.trim()));
+        addr.textContent = wallet.publicKey.toBase58();
+        sec.value = raw.trim();
+        expl.href = `${EXPL}/address/${wallet.publicKey.toBase58()}`;
+        addLog({type:"ok", msg:"Imported base64 secret"});
+      }catch(e){ addLog({type:"err", msg:"Import failed: "+(e.message||e)}); }
+    });
 
-    sendBtn.onclick=async()=>{ try{ ensureConn(); if(!wallet)return addLog({type:"err",msg:"Generate first"});
-      const to=(toEl.value||"").trim(); const amt=(amtEl.value||"").trim(); const lamports=Math.round(Number(amt)*LAMPORTS_PER_SOL);
-      const tx=new Transaction().add(SystemProgram.transfer({fromPubkey:wallet.publicKey,toPubkey:new PublicKey(to),lamports}));
-      const sig=await sendAndConfirmTransaction(conn,tx,[wallet],{commitment:"confirmed"});
-      addLog({type:"ok",msg:"TX confirmed",sig}); check.click(); }catch(e){ addLog({type:"err",msg:"Send error: "+(e.message||e)}); } };
+    copyAddr.addEventListener("click", async ()=>{
+      const a = addr.textContent.trim(); if(!a || a==="—") return;
+      await navigator.clipboard.writeText(a);
+      addLog({type:"ok", msg:"Address copied"});
+    });
 
-    clearBtn.onclick=()=>{ logs.innerHTML=""; };
-    rpc.value = DEFAULT_RPC; // ← 末尾で設定
+    ping.addEventListener("click", async ()=>{
+      try{
+        ensureConn();
+        const t0=performance.now();
+        const slot = await conn.getSlot("confirmed");
+        const ms = Math.round(performance.now()-t0);
+        feeEl.textContent = lastFee.toLocaleString();
+        upd.textContent = new Date().toLocaleTimeString();
+        status.style.display="inline-flex"; status.className="pill ok";
+        addLog({msg:`Ping OK (slot ${slot}, ${ms}ms)`});
+      }catch(e){ status.style.display="inline-flex"; status.className="pill err";
+        addLog({type:"err", msg:"Ping failed: "+(e.message||e)}); }
+    });
+
+    check.addEventListener("click", async ()=>{
+      try{
+        ensureConn();
+        if(!wallet) return addLog({type:"err", msg:"Generate first"});
+        const lamports = await conn.getBalance(wallet.publicKey,"confirmed");
+        balEl.textContent = (lamports / LAMPORTS_PER_SOL) + " BSSC";
+        upd.textContent = new Date().toLocaleTimeString();
+        addLog({msg:`Balance ${lamports} lamports`});
+      }catch(e){ addLog({type:"err", msg:"Balance error: "+(e.message||e)}); }
+    });
+
+    maxBtn.addEventListener("click", async ()=>{
+      try{
+        ensureConn(); if(!wallet) return addLog({type:"err", msg:"Generate first"});
+        const lamports = await conn.getBalance(wallet.publicKey,"confirmed");
+        const sendable = Math.max(0, lamports - lastFee); // approx fee
+        amtEl.value = (sendable / LAMPORTS_PER_SOL).toString();
+        addLog({msg:`Max computed (fee ≈ ${lastFee} lamports)`});
+      }catch(e){ addLog({type:"err", msg:"Max error: "+(e.message||e)}); }
+    });
+
+    sendBtn.addEventListener("click", async ()=>{
+      try{
+        ensureConn();
+        if(!wallet) return addLog({type:"err", msg:"Generate first"});
+        const to = (toEl.value||"").trim();
+        const amount = (amtEl.value||"").trim();
+        if(!to || !amount) return addLog({type:"err", msg:"Enter recipient & amount"});
+        let toPk; try{ toPk = new PublicKey(to); }catch{ return addLog({type:"err", msg:"Recipient must be Base58 (Solana)"}); }
+
+        const lamports = Math.round(Number(amount) * LAMPORTS_PER_SOL);
+        const tx = new Transaction().add(
+          SystemProgram.transfer({ fromPubkey: wallet.publicKey, toPubkey: toPk, lamports })
+        );
+        const sig = await sendAndConfirmTransaction(conn, tx, [wallet], {commitment:"confirmed"});
+        addLog({type:"ok", msg:"TX confirmed", sig});
+        check.click();
+      }catch(e){ addLog({type:"err", msg:"Send error: "+(e.message||e)}); }
+    });
+
+    clearBtn.addEventListener("click", ()=>{ logs.innerHTML=""; });
+
+    // default RPC for proxy
+    rpc.value = DEFAULT_RPC;
   </script>
 </body>
 </html>
