@@ -342,31 +342,25 @@
     // Send (local sign → broadcast)
     sendBtn.onclick = async () => {
   try {
-    // --- ensure provider (fresh instance for tx) ---
+    // 1) 入力とウォレット
     const url = (rpc.value || "").trim() || "https://bssc-rpc.bssc.live";
-    const net = new Web3(new Web3.providers.HttpProvider(url)); // use this ONLY for network ops
-
-    if (!account) return addLog({ type: "err", msg: "Generate/Load a wallet first" });
+    if (!account) return addLog({type:"err", msg:"Generate/Load a wallet first"});
 
     const toAddr = (to.value || "").trim();
     const amount = (amt.value || "").trim();
-    if (!net.utils.isAddress(toAddr)) return addLog({ type: "err", msg: "Invalid recipient" });
-    if (!amount) return addLog({ type: "err", msg: "Enter amount" });
+    const net = new Web3(new Web3.providers.HttpProvider(url)); // このインスタンスは情報取得にのみ使用
+    if (!net.utils.isAddress(toAddr)) return addLog({type:"err", msg:"Invalid recipient"});
+    if (!amount) return addLog({type:"err", msg:"Enter amount"});
 
-    // --- chain sanity (optional) ---
-    let chainIdNum = 0x4253;
-    try {
-      const chainIdLive = await net.eth.getChainId?.();
-      if (chainIdLive) chainIdNum = Number(chainIdLive);
-    } catch (_) { /* ignore */ }
-
-    // --- fees & nonce ---
-    const nonce   = await net.eth.getTransactionCount(account.address, "latest");
+    // 2) チェーン情報 & 手数料
+    let chainIdNum = 0x4253; // BSSC testnet
+    try { const live = await net.eth.getChainId?.(); if (live) chainIdNum = Number(live); } catch {}
     let gasPrice;
-    try { gasPrice = await net.eth.getGasPrice(); }
-    catch { gasPrice = net.utils.toWei("1", "gwei"); } // fallback
+    try { gasPrice = await net.eth.getGasPrice(); } catch { gasPrice = net.utils.toWei("1","gwei"); }
 
-    // --- legacy (type-0) tx for max compatibility ---
+    const nonce = await net.eth.getTransactionCount(account.address, "latest");
+
+    // 3) Legacy TX を作成（最も互換性が高い）
     const tx = {
       from:  account.address,
       to:    toAddr,
@@ -377,22 +371,49 @@
       chainId: chainIdNum
     };
 
-    // --- local sign with web3Local (no provider needed here) ---
+    // 4) ローカル署名（RPC不要）
     const signed = await web3Local.eth.accounts.signTransaction(tx, account.privateKey);
+    if (!signed.rawTransaction) throw new Error("Failed to sign transaction");
 
-    // --- broadcast with the SAME fresh provider ---
-    const receiptP = new Promise((resolve, reject) => {
-      net.eth.sendSignedTransaction(signed.rawTransaction)
-        .on("transactionHash", (hash) => addLog({ type: "info", msg: "TX sent", hash }))
-        .on("receipt",        (rc)   => resolve(rc))
-        .on("error",          (err)  => reject(err));
+    // 5) JSON-RPC を生で叩いてブロードキャスト
+    const body = {
+      jsonrpc: "2.0",
+      id: 1,
+      method: "eth_sendRawTransaction",
+      params: [signed.rawTransaction]
+    };
+
+    const resp = await fetch(url, {
+      method: "POST",
+      headers: {"content-type":"application/json"},
+      body: JSON.stringify(body)
     });
+    const j = await resp.json();
 
-    const rc = await receiptP;
-    addLog({ type: rc.status ? "ok" : "err", msg: "TX confirmed", hash: rc.transactionHash });
-    check.click(); // refresh balance
+    if (j.error) {
+      // 典型: insufficient funds / replacement tx underpriced / already known
+      return addLog({type:"err", msg:`RPC error: ${j.error.message || JSON.stringify(j.error)}`});
+    }
+
+    const hash = j.result;
+    addLog({type:"info", msg:"TX sent", hash});
+
+    // 6) 確認ループ（簡易）
+    const wait = async(h)=>{
+      for (let i=0;i<30;i++){
+        try {
+          const rc = await net.eth.getTransactionReceipt(h);
+          if (rc) return rc;
+        } catch {}
+        await new Promise(r=>setTimeout(r, 2000));
+      }
+      return null;
+    };
+    const rc = await wait(hash);
+    addLog({type: rc && rc.status ? "ok":"err", msg: rc ? "TX confirmed":"No receipt (timeout)", hash});
+    check.click();
   } catch (e) {
-    addLog({ type: "err", msg: "Send error: " + (e.message || e) });
+    addLog({type:"err", msg:"Send error: " + (e.message || e)});
   }
 };
 
