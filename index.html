@@ -8,8 +8,9 @@
   <style>
     :root{ --ph-purple:#6d28d9; --ph-indigo:#4f46e5; --stroke:rgba(255,255,255,.06); }
     .shell{ max-width:1100px; margin:0 auto; padding:32px 16px }
-    .card{ background:linear-gradient(180deg,#10111a,#0b0b10 65%); border-radius:16px; padding:20px;
-           box-shadow:0 12px 32px rgba(0,0,0,.4); border:1px solid var(--stroke) }
+    .card{ background:linear-gradient(180deg,#10111a,#0b0b10 65%);
+           border-radius:16px; padding:20px; box-shadow:0 12px 32px rgba(0,0,0,.4);
+           border:1px solid var(--stroke) }
     .primary{ background-image:linear-gradient(135deg,var(--ph-purple),var(--ph-indigo));
               color:#fff; border-radius:12px; padding:10px 16px; font-weight:700;
               box-shadow:0 8px 24px rgba(109,40,217,.35); border:1px solid rgba(255,255,255,.1);
@@ -38,7 +39,6 @@
 </head>
 <body>
   <main class="shell space-y-6">
-    <!-- Header -->
     <header class="flex items-center justify-between">
       <div class="flex items-center gap-3">
         <div class="w-9 h-9 rounded-xl ring-1 ring-white/10"
@@ -51,7 +51,6 @@
       </div>
     </header>
 
-    <!-- Network / Quick -->
     <section class="grid md:grid-cols-3 gap-4">
       <div class="card md:col-span-2">
         <div class="text-xs uppercase text-zinc-400 mb-2">Network</div>
@@ -80,7 +79,6 @@
       </div>
     </section>
 
-    <!-- Wallet / Send -->
     <section class="grid md:grid-cols-2 gap-4">
       <div class="card space-y-3">
         <div class="text-xs uppercase text-zinc-400">Your Wallet</div>
@@ -107,7 +105,6 @@
       </div>
     </section>
 
-    <!-- Activity -->
     <section class="card space-y-3">
       <div class="flex items-center justify-between">
         <div class="text-xs uppercase text-zinc-400">Activity</div>
@@ -117,14 +114,16 @@
     </section>
   </main>
 
-  <!-- Solana web3.js (ESM) -->
   <script type="module">
     import {
       Connection, Keypair, PublicKey,
-      SystemProgram, Transaction, sendAndConfirmTransaction, LAMPORTS_PER_SOL
+      SystemProgram, Transaction, sendAndConfirmTransaction, LAMPORTS_PER_SOL, Message
     } from "https://esm.sh/@solana/web3.js@1.95.3?bundle";
 
-    // ------- DOM refs -------
+    // ---------- RPC proxy ----------
+    const PROXY_RPC = (location?.origin || "") + "/api/solana";
+
+    // ---------- DOM ----------
     const $ = (id)=>document.getElementById(id);
     const rpc=$("rpc"), ping=$("ping"), check=$("check");
     const gen=$("gen"), save=$("save"), load=$("load"), importRaw=$("importRaw");
@@ -133,16 +132,16 @@
     const toEl=$("to"), amtEl=$("amt"), maxBtn=$("max"), sendBtn=$("send");
     const logs=$("logs"), clearBtn=$("clear"), status=$("status");
 
-    // ------- State -------
+    // ---------- State ----------
     const LS_KEY="micro_bssc_solana_secret_b64";
     const EXPL="https://explorer.bssc.live";
-    const DEFAULT_RPC=location.origin + "/api/solana";  // server-side proxy
-    let conn=null, wallet=null, lastFee=5000;
+    const DEFAULT_RPC=PROXY_RPC;
+    let conn=null, wallet=null, feeHint=5000;
 
-    // ------- Utils -------
-    const b64e = (u8)=>btoa(String.fromCharCode(...u8));
-    const b64d = (b)=>Uint8Array.from(atob(b), c=>c.charCodeAt(0));
-    function addLog({type="info", msg, sig}){
+    // ---------- Utils ----------
+    const b64e=(u8)=>btoa(String.fromCharCode(...u8));
+    const b64d=(b)=>Uint8Array.from(atob(b), c=>c.charCodeAt(0));
+    function addLog({type="info",msg,sig}){
       const row=document.createElement("div"); row.className="log-row";
       const ts=document.createElement("div"); ts.className="mono text-zinc-400"; ts.textContent=new Date().toLocaleTimeString();
       const body=document.createElement("div"); body.className="truncate";
@@ -150,17 +149,59 @@
       body.appendChild(tag);
       const span=document.createElement("span"); span.className="ml-2";
       if(sig){ const a=document.createElement("a"); a.href=`${EXPL}/tx/${sig}`; a.target="_blank"; a.rel="noreferrer";
-        a.textContent=sig.slice(0,10)+"…"+sig.slice(-8); a.className="hover-copy"; body.appendChild(a); }
-      else{ span.textContent=msg; body.appendChild(span); }
+        a.textContent=sig.slice(0,10)+"…"+sig.slice(-8); a.className="hover-copy"; body.appendChild(a);}
+      else{ span.textContent=msg; body.appendChild(span);}
       row.appendChild(ts); row.appendChild(body); logs.prepend(row);
     }
-    function ensureConn(){ const url=(rpc.value||"").trim() || DEFAULT_RPC; conn=new Connection(url,"confirmed"); return conn; }
+    function ensureConn(){ const url=(rpc.value||"").trim()||DEFAULT_RPC; conn=new Connection(url,"confirmed"); return conn; }
 
-    // ------- Actions -------
+    // ---------- Raw JSON-RPC via proxy ----------
+    async function rpcCall(method, params=[]){
+      const r = await fetch(PROXY_RPC, {
+        method:"POST",
+        headers:{ "content-type":"application/json" },
+        body: JSON.stringify({ jsonrpc:"2.0", id:Date.now(), method, params })
+      });
+      const j = await r.json();
+      if (j.error) throw new Error(`${method}: ${j.error.message || JSON.stringify(j.error)}`);
+      return j.result;
+    }
+
+    // sendRawTransaction(base64) + fallback(sendTransaction)
+    const u8ToB64 = (u8)=>btoa(String.fromCharCode(...u8));
+    async function sendRawBase64AndConfirm(tx){
+      const { blockhash, lastValidBlockHeight } = await conn.getLatestBlockhash("confirmed");
+      tx.recentBlockhash = blockhash;
+      tx.feePayer = wallet.publicKey;
+      tx.sign(wallet);
+      const raw = tx.serialize();
+      const b64 = u8ToB64(raw);
+
+      let sig;
+      try {
+        sig = await rpcCall("sendRawTransaction", [b64, { skipPreflight:false, maxRetries:3 }]);
+      } catch (e) {
+        if (!/not supported|Method.*sendRawTransaction/i.test(String(e))) throw e;
+        sig = await rpcCall("sendTransaction", [b64, { skipPreflight:false, maxRetries:3, encoding:"base64" }]);
+      }
+      await conn.confirmTransaction({ signature:sig, blockhash, lastValidBlockHeight }, "confirmed");
+      return sig;
+    }
+
+    // estimate fee (optional but useful)
+    async function estimateFeeLamports(tx){
+      tx.recentBlockhash = (await conn.getLatestBlockhash("confirmed")).blockhash;
+      tx.feePayer = wallet.publicKey;
+      const msg = Message.compile(tx);
+      const feeInfo = await conn.getFeeForMessage(msg,"confirmed");
+      return feeInfo?.value ?? feeHint;
+    }
+
+    // ---------- Actions ----------
     gen.addEventListener("click", ()=>{
       wallet = Keypair.generate();
       addr.textContent = wallet.publicKey.toBase58();
-      sec.value = b64e(wallet.secretKey);                     // demo only
+      sec.value = b64e(wallet.secretKey);
       expl.href = `${EXPL}/address/${wallet.publicKey.toBase58()}`;
       addLog({msg:"Generated new wallet"});
     });
@@ -195,18 +236,17 @@
     });
 
     copyAddr.addEventListener("click", async ()=>{
-      const a = addr.textContent.trim(); if(!a || a==="—") return;
-      await navigator.clipboard.writeText(a);
-      addLog({type:"ok", msg:"Address copied"});
+      const a=addr.textContent.trim(); if(!a||a==="—") return;
+      await navigator.clipboard.writeText(a); addLog({type:"ok", msg:"Address copied"});
     });
 
     ping.addEventListener("click", async ()=>{
       try{
         ensureConn();
         const t0=performance.now();
-        const slot = await conn.getSlot("confirmed");
-        const ms = Math.round(performance.now()-t0);
-        feeEl.textContent = lastFee.toLocaleString();
+        const slot=await conn.getSlot("confirmed");
+        const ms=Math.round(performance.now()-t0);
+        feeEl.textContent = feeHint.toLocaleString();
         upd.textContent = new Date().toLocaleTimeString();
         status.style.display="inline-flex"; status.className="pill ok";
         addLog({msg:`Ping OK (slot ${slot}, ${ms}ms)`});
@@ -216,8 +256,7 @@
 
     check.addEventListener("click", async ()=>{
       try{
-        ensureConn();
-        if(!wallet) return addLog({type:"err", msg:"Generate first"});
+        ensureConn(); if(!wallet) return addLog({type:"err", msg:"Generate first"});
         const lamports = await conn.getBalance(wallet.publicKey,"confirmed");
         balEl.textContent = (lamports / LAMPORTS_PER_SOL) + " BSSC";
         upd.textContent = new Date().toLocaleTimeString();
@@ -229,9 +268,10 @@
       try{
         ensureConn(); if(!wallet) return addLog({type:"err", msg:"Generate first"});
         const lamports = await conn.getBalance(wallet.publicKey,"confirmed");
-        const sendable = Math.max(0, lamports - lastFee); // approx fee
+        const fee = feeHint; // or await estimateFeeLamports(new Transaction())
+        const sendable = Math.max(0, lamports - fee);
         amtEl.value = (sendable / LAMPORTS_PER_SOL).toString();
-        addLog({msg:`Max computed (fee ≈ ${lastFee} lamports)`});
+        addLog({msg:`Max computed (fee ≈ ${fee} lamports)`});
       }catch(e){ addLog({type:"err", msg:"Max error: "+(e.message||e)}); }
     });
 
@@ -240,23 +280,34 @@
         ensureConn();
         if(!wallet) return addLog({type:"err", msg:"Generate first"});
         const to = (toEl.value||"").trim();
-        const amount = (amtEl.value||"").trim();
+        const amount = Number(amtEl.value||"0");
         if(!to || !amount) return addLog({type:"err", msg:"Enter recipient & amount"});
-        let toPk; try{ toPk = new PublicKey(to); }catch{ return addLog({type:"err", msg:"Recipient must be Base58 (Solana)"}); }
+        let toPk; try{ toPk=new PublicKey(to); }catch{ return addLog({type:"err", msg:"Recipient must be Base58 (Solana)"}); }
 
-        const lamports = Math.round(Number(amount) * LAMPORTS_PER_SOL);
-        const tx = new Transaction().add(
-          SystemProgram.transfer({ fromPubkey: wallet.publicKey, toPubkey: toPk, lamports })
-        );
-        const sig = await sendAndConfirmTransaction(conn, tx, [wallet], {commitment:"confirmed"});
+        const lamports = Math.round(amount * LAMPORTS_PER_SOL);
+        const tx = new Transaction().add(SystemProgram.transfer({ fromPubkey: wallet.publicKey, toPubkey: toPk, lamports }));
+
+        // fee/balance pre-check
+        const fee = await estimateFeeLamports(tx);
+        feeEl.textContent = fee.toLocaleString();
+        const bal = await conn.getBalance(wallet.publicKey,"confirmed");
+        if (bal < lamports + fee) {
+          const need = ((lamports+fee - bal)/LAMPORTS_PER_SOL).toFixed(9);
+          return addLog({type:"err", msg:`Insufficient funds (+${need} BSSC needed incl. fee)`});
+        }
+
+        // sendRawTransaction(base64) → confirm
+        const sig = await sendRawBase64AndConfirm(tx);
         addLog({type:"ok", msg:"TX confirmed", sig});
         check.click();
-      }catch(e){ addLog({type:"err", msg:"Send error: "+(e.message||e)}); }
+      }catch(e){
+        addLog({type:"err", msg:"Send error: "+(e.message||e)});
+      }
     });
 
     clearBtn.addEventListener("click", ()=>{ logs.innerHTML=""; });
 
-    // default RPC for proxy
+    // default RPC (proxy)
     rpc.value = DEFAULT_RPC;
   </script>
 </body>
