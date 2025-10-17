@@ -1,0 +1,184 @@
+<!doctype html>
+<html lang="ja" class="h-full bg-zinc-950 text-zinc-100">
+<head>
+  <meta charset="utf-8"/>
+  <meta name="viewport" content="width=device-width,initial-scale=1"/>
+  <title>BSSC Minimal Wallet</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <style>
+    .card{ @apply bg-zinc-900/60 backdrop-blur rounded-2xl p-5 shadow-lg ring-1 ring-white/5 }
+    .btn{ @apply rounded-xl px-4 py-2 bg-emerald-600 hover:bg-emerald-500 transition text-white font-medium}
+    .btn-muted{ @apply rounded-xl px-4 py-2 bg-zinc-800 hover:bg-zinc-700 transition text-zinc-100 font-medium}
+    .label{ @apply text-xs uppercase text-zinc-400 tracking-wider}
+    .mono{ font-variant-numeric: tabular-nums }
+    input,textarea{ @apply w-full rounded-lg bg-zinc-900/70 ring-1 ring-white/10 px-3 py-2 text-zinc-100 outline-none }
+  </style>
+  <!-- web3.js (browser ESM バンドル) -->
+  <script type="module">
+    import {
+      Connection, Keypair, LAMPORTS_PER_SOL, SystemProgram, Transaction, PublicKey
+    } from "https://esm.sh/@solana/web3.js@1.95.3?bundle";
+
+    // ====== DOM ======
+    const $ = (id)=>document.getElementById(id);
+    const rpcInput = $("rpc");
+    const genBtn   = $("gen");
+    const saveBtn  = $("save");
+    const loadBtn  = $("load");
+    const pkEl     = $("pubkey");
+    const skEl     = $("secret");
+    const copyPk   = $("copyPk");
+    const balBtn   = $("balanceBtn");
+    const balEl    = $("balance");
+    const toEl     = $("to");
+    const amtEl    = $("amt");
+    const sendBtn  = $("send");
+    const logEl    = $("log");
+
+    // ====== 状態 ======
+    let connection = null;
+    let wallet = null; // Keypair
+    const LS_KEY = "bssc_wallet_secret_b58";
+
+    // ====== ユーティリティ ======
+    function log(msg){ logEl.value = `[${new Date().toLocaleTimeString()}] ${msg}\n` + logEl.value; }
+    const toLamports = (amountBNB)=> Math.round(Number(amountBNB) * LAMPORTS_PER_SOL);
+    const fmt = (n)=> new Intl.NumberFormat("en-US",{maximumFractionDigits:9}).format(n);
+
+    function b58encode(bytes){
+      // 簡易：Base58はライブラリ無しでもOKにするため、ここはBase64保存に妥協（デモ用途）
+      return btoa(String.fromCharCode(...bytes));
+    }
+    function b58decode(str){
+      const bin = atob(str); const arr=new Uint8Array(bin.length);
+      for(let i=0;i<bin.length;i++) arr[i]=bin.charCodeAt(i);
+      return arr;
+    }
+
+    // ====== 接続 / 初期化 ======
+    function ensureConnection(){
+      const rpc = rpcInput.value.trim();
+      if(!rpc) throw new Error("RPC URL を入力してください");
+      connection = new Connection(rpc, "confirmed");
+      return connection;
+    }
+
+    // ====== ウォレット生成 ======
+    genBtn.onclick = ()=>{
+      wallet = Keypair.generate();
+      pkEl.textContent = wallet.publicKey.toBase58();
+      skEl.value = b58encode(wallet.secretKey); // デモ用にbase64保存（本番は暗号化推奨）
+      log("新しいウォレットを生成しました");
+    };
+
+    // ====== 保存/読込（ローカルブラウザ） ======
+    saveBtn.onclick = ()=>{
+      if(!wallet){ log("先にウォレットを生成してください"); return; }
+      localStorage.setItem(LS_KEY, b58encode(wallet.secretKey));
+      log("ローカルに秘密鍵を保存しました（デモ）。");
+    };
+    loadBtn.onclick = ()=>{
+      const raw = localStorage.getItem(LS_KEY);
+      if(!raw){ log("保存された秘密鍵がありません"); return; }
+      const sk = b58decode(raw);
+      wallet = Keypair.fromSecretKey(sk);
+      pkEl.textContent = wallet.publicKey.toBase58();
+      skEl.value = raw;
+      log("ローカルからウォレットを復元しました。");
+    };
+    copyPk.onclick = async ()=>{
+      const addr = pkEl.textContent.trim();
+      if(!addr) return;
+      await navigator.clipboard.writeText(addr);
+      log("アドレスをコピーしました");
+    };
+
+    // ====== 残高確認 ======
+    balBtn.onclick = async ()=>{
+      try{
+        ensureConnection();
+        if(!wallet) { log("先にウォレットを生成/読込してください"); return; }
+        const lamports = await connection.getBalance(wallet.publicKey);
+        balEl.textContent = `${fmt(lamports / LAMPORTS_PER_SOL)} BNB`;
+        log(`残高: ${lamports} lamports`);
+      }catch(e){ log(`残高取得エラー: ${e.message||e}`); }
+    };
+
+    // ====== 送金 ======
+    sendBtn.onclick = async ()=>{
+      try{
+        ensureConnection();
+        if(!wallet){ log("先にウォレットを生成/読込してください"); return; }
+        const to = toEl.value.trim();
+        const amt = amtEl.value.trim();
+        if(!to || !amt){ log("送金先と金額を入力してください"); return; }
+        let toPk;
+        try { toPk = new PublicKey(to); } catch { log("送金先アドレスが不正です"); return; }
+
+        const lamports = toLamports(amt);
+        const tx = new Transaction().add(SystemProgram.transfer({
+          fromPubkey: wallet.publicKey,
+          toPubkey:   toPk,
+          lamports
+        }));
+
+        const sig = await connection.sendTransaction(tx, [wallet], {skipPreflight:false});
+        log(`送金送信: ${sig}`);
+        const conf = await connection.confirmTransaction(sig, "confirmed");
+        log(`送金完了: ${sig}  status=${conf?.value?.err ? "ERR" : "OK"}`);
+      }catch(e){ log(`送金エラー: ${e.message||e}`); }
+    };
+
+    // デフォルトRPC
+    rpcInput.value = "https://bssc-rpc.bssc.live";
+  </script>
+</head>
+<body class="h-full">
+  <main class="max-w-4xl mx-auto px-4 py-8 space-y-6">
+    <header class="flex items-center justify-between">
+      <h1 class="text-2xl font-semibold tracking-tight">BSSC Minimal Wallet</h1>
+      <div class="text-sm text-zinc-400">Send / Receive on BSSC testnet</div>
+    </header>
+
+    <section class="card">
+      <div class="label">RPC URL</div>
+      <div class="mt-2 flex gap-2">
+        <input id="rpc" placeholder="https://bssc-rpc.bssc.live"/>
+        <button id="balanceBtn" class="btn-muted">Check Balance</button>
+      </div>
+    </section>
+
+    <section class="grid grid-cols-1 md:grid-cols-2 gap-4">
+      <div class="card space-y-3">
+        <div class="label">Wallet</div>
+        <div class="flex gap-2">
+          <button id="gen" class="btn">Generate</button>
+          <button id="save" class="btn-muted">Save (local)</button>
+          <button id="load" class="btn-muted">Load</button>
+        </div>
+        <div class="label">Address</div>
+        <div class="mt-1 break-all mono" id="pubkey">—</div>
+        <button id="copyPk" class="btn-muted mt-2">Copy Address</button>
+        <div class="label mt-4">Secret (base64, demo)</div>
+        <textarea id="secret" rows="3" placeholder="（デモ用途：本番は暗号化保管推奨）"></textarea>
+      </div>
+
+      <div class="card space-y-3">
+        <div class="label">Balance</div>
+        <div id="balance" class="text-3xl font-semibold mono mt-1">—</div>
+        <div class="label mt-4">Send</div>
+        <input id="to" placeholder="Recipient Address (BSSC)"/>
+        <div class="flex gap-2 mt-2">
+          <input id="amt" placeholder="Amount (BNB)"/>
+          <button id="send" class="btn">Send</button>
+        </div>
+      </div>
+    </section>
+
+    <section class="card">
+      <div class="label">Logs</div>
+      <textarea id="log" rows="10" class="mt-2" placeholder="ここに進捗やトランザクションIDが表示されます"></textarea>
+    </section>
+  </main>
+</body>
+</html>
