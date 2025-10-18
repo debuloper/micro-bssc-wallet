@@ -38,7 +38,6 @@
     .sig-full{ word-break:break-all; font-family:ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace }
     #logs{ min-height:120px; }
 
-    /* Modal (shared) */
     .modal-back{ position:fixed; inset:0; background:rgba(0,0,0,.6); backdrop-filter:blur(4px); z-index:60; display:none }
     .modal{ max-width:760px; margin:6vh auto; background:#10111a; border:1px solid var(--stroke); border-radius:16px; overflow:hidden }
     .modal-hd{ display:flex; justify-content:space-between; align-items:center; padding:14px 18px; border-bottom:1px solid var(--stroke) }
@@ -47,7 +46,6 @@
 </head>
 <body>
   <main class="shell space-y-6">
-    <!-- Header -->
     <header class="flex items-center justify-between">
       <div class="flex items-center gap-3">
         <div class="w-9 h-9 rounded-xl ring-1 ring-white/10"
@@ -60,7 +58,6 @@
       </div>
     </header>
 
-    <!-- Network (display only) -->
     <section class="grid md:grid-cols-3 gap-4">
       <div class="card md:col-span-2">
         <div class="text-xs uppercase text-zinc-400 mb-2">Network</div>
@@ -89,7 +86,6 @@
       </div>
     </section>
 
-    <!-- Wallet / Send -->
     <section class="grid md:grid-cols-2 gap-4">
       <div class="card space-y-3">
         <div class="text-xs uppercase text-zinc-400">Your Wallet</div>
@@ -116,7 +112,6 @@
       </div>
     </section>
 
-    <!-- Activity -->
     <section class="card space-y-3">
       <div class="flex items-center justify-between">
         <div class="text-xs uppercase text-zinc-400">Activity</div>
@@ -156,21 +151,17 @@
     </div>
   </div>
 
-  <!-- Solana web3.js (ESM) -->
   <script type="module">
     import {
       Connection, Keypair, PublicKey,
       SystemProgram, Transaction, LAMPORTS_PER_SOL
     } from "https://esm.sh/@solana/web3.js@1.95.3?bundle";
 
-    // ----- Config -----
-    const PROXY_RPC = (location?.origin || "") + "/api/solana"; // actual RPC via proxy
+    const PROXY_RPC = (location?.origin || "") + "/api/solana";
     const EXPL="https://explorer.bssc.live";
 
-    // ----- State -----
     let conn=null, wallet=null, feeHint=5000;
 
-    // ----- Utils -----
     const $=(id)=>document.getElementById(id);
     const b64e=(u8)=>btoa(String.fromCharCode(...u8));
     const b64d=(b)=>Uint8Array.from(atob(b), c=>c.charCodeAt(0));
@@ -188,7 +179,7 @@
         const cpy=document.createElement("button"); cpy.className="ghost"; cpy.textContent="Copy";
         cpy.onclick=()=>navigator.clipboard.writeText(sig);
         const open=document.createElement("button"); open.className="ghost"; open.textContent="Open Explorer";
-        open.onclick=()=>window.open(EXPL, "_blank", "noopener"); // /tx/<sig> 直は未対応のためトップへ
+        open.onclick=()=>window.open(EXPL,"_blank","noopener");
         btns.appendChild(cpy); btns.appendChild(open); body.appendChild(btns);
       } else {
         const span=document.createElement("span"); span.className="ml-2"; span.textContent=msg; body.appendChild(span);
@@ -198,17 +189,16 @@
 
     function ensureConn(){ conn=new Connection(PROXY_RPC,"confirmed"); return conn; }
 
-    // auto refresh balance (silent)
     async function refreshBalance(){
       try{
-        ensureConn(); if(!wallet) return;
-        const lam=await conn.getBalance(wallet.publicKey,"confirmed");
-        $("bal").textContent = (lam/LAMPORTS_PER_SOL) + " BSSC";
+        ensureConn();
+        if(!wallet) return;
+        const lam = await conn.getBalance(wallet.publicKey,"confirmed");
+        $("bal").textContent = (lam / LAMPORTS_PER_SOL) + " BSSC";
         $("upd").textContent = new Date().toLocaleTimeString();
       }catch{}
     }
 
-    // ----- Quick Actions -----
     $("gen").onclick=()=>{ wallet=Keypair.generate();
       $("addr").textContent=wallet.publicKey.toBase58();
       $("sec").value=b64e(wallet.secretKey);
@@ -240,15 +230,18 @@
     $("ping").onclick=async()=>{ try{ ensureConn(); const slot=await conn.getSlot("confirmed"); addLog({msg:`Ping OK (slot ${slot})`}); }catch(e){ addLog({type:"err", msg:"Ping failed: "+(e.message||e)});} };
 
     $("check").onclick=async()=>{ try{ ensureConn(); if(!wallet)return addLog({type:"err", msg:"Generate first"});
-      const lam=await conn.getBalance(wallet.publicKey,"confirmed"); $("bal").textContent=(lam/LAMPORTS_PER_SOL)+" BSSC";
-      $("upd").textContent=new Date().toLocaleTimeString(); addLog({msg:`Balance ${lam} lamports`}); } catch(e){ addLog({type:"err", msg:"Balance error: "+(e.message||e)});} };
+      const lam=await conn.getBalance(wallet.publicKey,"confirmed");
+      $("bal").textContent=(lam/LAMPORTS_PER_SOL)+" BSSC"; $("upd").textContent=new Date().toLocaleTimeString();
+      addLog({msg:`Balance ${lam} lamports`}); } catch(e){ addLog({type:"err", msg:"Balance error: "+(e.message||e)});} };
 
     $("max").onclick=async()=>{ try{ ensureConn(); if(!wallet)return addLog({type:"err", msg:"Generate first"});
-      const lam=await conn.getBalance(wallet.publicKey,"confirmed"); $("amt").value=(Math.max(0,lam-feeHint)/LAMPORTS_PER_SOL).toString(); addLog({msg:"Max computed"});} catch(e){ addLog({type:"err", msg:"Max error: "+(e.message||e)});} };
+      const lam=await conn.getBalance(wallet.publicKey,"confirmed"); $("amt").value=(Math.max(0,lam-5000)/LAMPORTS_PER_SOL).toString();
+      addLog({msg:"Max computed"});} catch(e){ addLog({type:"err", msg:"Max error: "+(e.message||e)});} };
 
-    // ----- Send (Solana path) + modal + auto balance refresh -----
+    // Send modal
     const txModal=$("txModal"), txBody=$("txBody"), txClose=$("txClose");
-    txClose.onclick=()=>{ txModal.style.display="none"; };
+    txClose.onclick=async()=>{ txModal.style.display="none"; await new Promise(r=>setTimeout(r,500)); await refreshBalance(); };
+    txModal.addEventListener("click", async (e)=>{ if(e.target===txModal){ txModal.style.display="none"; await new Promise(r=>setTimeout(r,500)); await refreshBalance(); } });
 
     $("send").onclick=async()=>{
       try{
@@ -268,10 +261,11 @@
 
         const sig = await conn.sendTransaction(tx, [wallet], { skipPreflight:false });
 
-        // show modal immediately
+        // Show modal
         txBody.innerHTML = `
           <div><strong>Status:</strong> <span id="txState" class="tag info">SENDING</span></div>
-          <div style="margin-top:10px"><strong>Signature</strong><div class="sig-full">${sig}</div></div>
+          <div class="mt-2"><strong>Signature</strong></div>
+          <div class="sig-full mt-1">${sig}</div>
           <div class="mt-3 flex gap-2">
             <button id="txCopy" class="ghost">Copy</button>
             <button id="txOpen" class="ghost">Open Explorer</button>
@@ -283,7 +277,6 @@
 
         addLog({ type:"info", msg:"TX sent", sig });
 
-        // confirm & update
         try{
           await conn.confirmTransaction(sig, "confirmed");
           addLog({ type:"ok", msg:"TX confirmed", sig });
